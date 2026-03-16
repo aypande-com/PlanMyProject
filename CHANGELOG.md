@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 - No changes yet.
 
+## [1.0.2] - 2026-03-16
+
+- Refreshed README build-status metadata and test-count badges from the latest verification run.
+
 ## [1.0.1] - 2026-03-15
 
 - Updated release documentation: moved `Unreleased` implementation notes into the `1.0.0` section.

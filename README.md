@@ -1,6 +1,6 @@
 # PlanMyProject
 
-Current release: `v1.0.1`
+Current release: `v1.0.2`
 
 Planning real engineering work is usually fragmented across notes, tickets, and chat. Execution drifts, priorities blur, and tasks lose context.
 
@@ -18,7 +18,7 @@ If you want to go from idea -> plan -> code without leaving VS Code, this extens
 
 ![build](https://img.shields.io/badge/build-pass-brightgreen?style=flat-square) ![tests](https://img.shields.io/badge/tests-21%2F21%20(100.00%25)-brightgreen?style=flat-square) ![code coverage](https://img.shields.io/badge/code%20coverage-84.19%25-yellow?style=flat-square) ![feature coverage](https://img.shields.io/badge/feature%20coverage-95.83%25-brightgreen?style=flat-square)
 
-Last updated: 2026-03-15T13:20:37.919Z
+Last updated: 2026-03-16T18:14:47.164Z
 - Overall build status: PASS
 - Test coverage: 21/21 tests passing (100.00%), failed: 0
 - Code coverage (all files): lines 84.19% | branches 75.82% | functions 85.11%
