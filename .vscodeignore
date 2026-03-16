@@ -9,6 +9,9 @@ scripts/**
 project.md
 .git/**
 .github/**
+copilot-instructions.md
+skills/**
+*.skill
 .vscode/**
 .vscode-test/**
 .gitignore
