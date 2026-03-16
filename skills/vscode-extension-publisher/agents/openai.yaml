@@ -1,0 +1,4 @@
+interface:
+  display_name: "VS Code Extension Publisher"
+  short_description: "Run safe VS Code extension release and publish workflows"
+  default_prompt: "Use $vscode-extension-publisher to run the extension release pipeline end-to-end."
