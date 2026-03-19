@@ -8,10 +8,7 @@
     ]
   },
   "include": [
-    "src/implement.ts",
-    "src/model.ts",
-    "src/tree.ts",
-    "src/privacy.ts",
+    "src/**/*.ts",
     "test/**/*.ts"
   ]
 }

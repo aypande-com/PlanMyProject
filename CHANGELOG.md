@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-- No changes yet.
+- Rewrote extension architecture for v2 around modular controller, parser, scanner, AI, debate, queue, and storage layers.
+- Added schema v2 parsing/serialization with typed task metadata, goal blocks, rationale, dependency-aware queue sections, and v1 migration support.
+- Added workspace scanner pipeline with language/dependency/signature/module inference plus persisted scan cache.
+- Added research index and debate archive persistence under `.pmp/`.
+- Added multi-provider AI abstraction (Copilot, Claude, OpenAI) and layered prompt/response parsing pipeline.
+- Added v2 command surface (goal setup/import, scan refresh, debate, rationale, linked files, policy override, index/archive viewers, summary export).
+- Replaced v1 tests with v2 unit coverage for parser, queue, migration, policy resolver, path safety, and AI response parsing.
 
 ## [1.0.2] - 2026-03-16
 

@@ -1,6 +1,6 @@
 # PlanMyProject
 
-Current release: `v1.0.2`
+Current release: `v2 rewrite (branch preview)`
 
 Planning real engineering work is usually fragmented across notes, tickets, and chat. Execution drifts, priorities blur, and tasks lose context.
 
@@ -31,7 +31,10 @@ Update source: `npm run build` or `npm run verify`
 
 1. VS Code `1.95+`
 2. Trusted workspace (untrusted workspaces are not supported)
-3. GitHub Copilot access for `Plan Task` and `Implement Task`
+3. AI provider access for planning/implementation:
+   - GitHub Copilot (default)
+   - Anthropic Claude (optional API key)
+   - OpenAI (optional API key)
 
 ## Get Started
 
@@ -204,13 +207,23 @@ Result: [T0003] and descendants removed, queue updated
 - `PlanMyProject: Plan Task (One Level)` (`Alt+P`)
 - `PlanMyProject: Add Task`
 - `PlanMyProject: Add Root Task`
-- `PlanMyProject: Load Requirements File`
 - `PlanMyProject: Drill Down Task`
-- `PlanMyProject: Implement Task (Copilot)`
+- `PlanMyProject: Implement Task`
 - `PlanMyProject: Delete Task`
 - `PlanMyProject: Rebuild Execution Queue`
 - `PlanMyProject: Refresh Tree`
 - `PlanMyProject: Cancel Active Request`
+- `PlanMyProject: Set Project Goal`
+- `PlanMyProject: Import Goal Statement`
+- `PlanMyProject: Refresh Scan`
+- `PlanMyProject: Debate Task`
+- `PlanMyProject: Mark Research Complete`
+- `PlanMyProject: Show Task Rationale`
+- `PlanMyProject: View Linked Files`
+- `PlanMyProject: Set Task File Send Policy`
+- `PlanMyProject: View Research Index`
+- `PlanMyProject: View Debate Archive`
+- `PlanMyProject: Export Plan Summary`
 
 ## Privacy and Copilot Data Flow
 

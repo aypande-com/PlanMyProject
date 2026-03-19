@@ -1,0 +1,181 @@
+import * as vscode from "vscode";
+import { TASK_TYPE_ICONS, type PlanDocument, type TaskNode, type WorkspaceScan } from "../model";
+import { isTaskBlocked } from "../model";
+
+interface RequestStatus {
+  taskId: string;
+  detail: string;
+  state: "running" | "success" | "error" | "cancelled";
+}
+
+class WorkspaceSnapshotItem extends vscode.TreeItem {
+  constructor(scan: WorkspaceScan | undefined) {
+    super("Workspace Snapshot", vscode.TreeItemCollapsibleState.Collapsed);
+    if (!scan) {
+      this.description = "No scan yet";
+      this.tooltip = "No workspace scan available yet.";
+    } else {
+      const partialCount = scan.modules.filter((module) => module.estimatedCompletion === "partial").length;
+      const completeCount = scan.modules.filter((module) => module.estimatedCompletion === "complete").length;
+      this.description = `${scan.modules.length} modules`;
+      this.tooltip = `Scan: ${scan.modules.length} modules | ${partialCount} partial | ${completeCount} complete`;
+    }
+    this.iconPath = new vscode.ThemeIcon("search");
+    this.contextValue = "workspaceSnapshot";
+  }
+}
+
+class TaskTreeItem extends vscode.TreeItem {
+  constructor(
+    readonly task: TaskNode,
+    private readonly plan: PlanDocument,
+    sourceUri: vscode.Uri | undefined,
+    requestStatus: RequestStatus | undefined,
+    researchGate: boolean
+  ) {
+    super(
+      `${TASK_TYPE_ICONS[task.type]} ${task.title}`,
+      task.children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+    );
+
+    const blocked = isTaskBlocked(plan, task.id, researchGate);
+    const confidence = task.confidence === null ? "n/a" : `${Math.round(task.confidence * 100)}%`;
+    const requestDetail = requestStatus?.taskId === task.id ? ` • ${requestStatus.detail}` : "";
+
+    this.id = task.id;
+    this.description = `${task.id} • ${task.origin}${blocked ? " • blocked" : ""}${requestDetail}`;
+    this.tooltip = [
+      `${task.id} [${task.status}] ${task.type}`,
+      `Goal: ${task.goalRef ?? "none"}`,
+      `Origin: ${task.origin}`,
+      `Confidence: ${confidence}`,
+      blocked ? "Blocked by dependencies or unresolved research tasks" : "Ready based on current dependencies"
+    ].join("\n");
+
+    this.contextValue = blocked
+      ? `task:${task.type}:blocked`
+      : `task:${task.type}`;
+
+    this.iconPath = iconForTask(task, requestStatus);
+    this.command = {
+      command: "planmyproject.drillDown",
+      title: "Drill Down",
+      arguments: [{ taskId: task.id, fileUri: sourceUri?.toString() }]
+    };
+
+    if (sourceUri) {
+      this.resourceUri = sourceUri;
+    }
+  }
+}
+
+export class PlanTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem>, vscode.Disposable {
+  private readonly emitter = new vscode.EventEmitter<vscode.TreeItem | undefined>();
+  readonly onDidChangeTreeData = this.emitter.event;
+
+  private plan: PlanDocument | undefined;
+  private sourceUri: vscode.Uri | undefined;
+  private scan: WorkspaceScan | undefined;
+  private requestStatus: RequestStatus | undefined;
+  private researchGate = true;
+
+  setPlan(plan: PlanDocument, sourceUri?: vscode.Uri, researchGate = true): void {
+    this.plan = plan;
+    this.sourceUri = sourceUri;
+    this.researchGate = researchGate;
+    this.refresh();
+  }
+
+  setWorkspaceScan(scan: WorkspaceScan | undefined): void {
+    this.scan = scan;
+    this.refresh();
+  }
+
+  setRequestStatus(status: RequestStatus | undefined): void {
+    this.requestStatus = status;
+    this.refresh();
+  }
+
+  refresh(): void {
+    this.emitter.fire(undefined);
+  }
+
+  dispose(): void {
+    this.emitter.dispose();
+  }
+
+  getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
+    return element;
+  }
+
+  getChildren(element?: vscode.TreeItem): vscode.ProviderResult<vscode.TreeItem[]> {
+    if (!this.plan) {
+      return [new WorkspaceSnapshotItem(this.scan)];
+    }
+
+    if (!element) {
+      const roots: vscode.TreeItem[] = [new WorkspaceSnapshotItem(this.scan)];
+      for (const rootId of this.plan.rootTaskIds) {
+        const task = this.plan.tasks[rootId];
+        if (!task) {
+          continue;
+        }
+        roots.push(new TaskTreeItem(task, this.plan, this.sourceUri, this.requestStatus, this.researchGate));
+      }
+      return roots;
+    }
+
+    if (element instanceof WorkspaceSnapshotItem) {
+      if (!this.scan) {
+        return [new vscode.TreeItem("No scan available")];
+      }
+
+      const items: vscode.TreeItem[] = [];
+      items.push(new vscode.TreeItem(`Languages: ${this.scan.detectedLanguages.map((item) => `${item.language}(${item.files})`).join(", ") || "none"}`));
+      items.push(new vscode.TreeItem(`Dependencies: ${this.scan.dependencies.length}`));
+      items.push(new vscode.TreeItem(`Modules: ${this.scan.modules.length}`));
+      items.push(new vscode.TreeItem(`Missing Areas: ${this.scan.missingAreas.join(", ") || "none"}`));
+      return items;
+    }
+
+    if (!(element instanceof TaskTreeItem)) {
+      return [];
+    }
+
+    const task = element.task;
+    const children: vscode.TreeItem[] = [];
+    for (const childId of task.children) {
+      const child = this.plan.tasks[childId];
+      if (!child) {
+        continue;
+      }
+      children.push(new TaskTreeItem(child, this.plan, this.sourceUri, this.requestStatus, this.researchGate));
+    }
+    return children;
+  }
+}
+
+function iconForTask(task: TaskNode, requestStatus: RequestStatus | undefined): vscode.ThemeIcon {
+  if (requestStatus?.taskId === task.id) {
+    if (requestStatus.state === "running") {
+      return new vscode.ThemeIcon("loading~spin");
+    }
+    if (requestStatus.state === "success") {
+      return new vscode.ThemeIcon("check");
+    }
+    if (requestStatus.state === "cancelled") {
+      return new vscode.ThemeIcon("circle-slash");
+    }
+    return new vscode.ThemeIcon("error");
+  }
+
+  if (task.status === "done") {
+    return new vscode.ThemeIcon("check");
+  }
+
+  if (task.status === "in-progress") {
+    return new vscode.ThemeIcon("dash");
+  }
+
+  return new vscode.ThemeIcon("circle-large-outline");
+}

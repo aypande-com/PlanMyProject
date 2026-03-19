@@ -1,0 +1,164 @@
+import {
+  addTask,
+  createTaskNode,
+  deleteTask,
+  type DebateEntry,
+  type PlanDocument,
+  type TaskNode,
+  type TaskType
+} from "../model";
+import { createTaskIdGenerator } from "../util";
+import type { AIService } from "../ai/AIService";
+
+export type DebateAction = "accept" | "rewrite" | "split" | "dismiss" | "defer";
+
+export interface DebateResponse {
+  content: string;
+  suggestedAction?: DebateAction;
+}
+
+export class DebateService {
+  constructor(
+    private readonly aiService: AIService,
+    private readonly getAuthorName: () => Promise<string | undefined>
+  ) {}
+
+  async generateOpening(task: TaskNode, workspaceSummary: string): Promise<DebateResponse> {
+    const prompt = [
+      "You are facilitating a task debate for software planning.",
+      `Task: [${task.id}] ${task.title}`,
+      `Type: ${task.type}`,
+      "Provide concise analysis and recommended next action.",
+      "Return plain text. End with 'Suggested action: <accept|rewrite|split|dismiss|defer>'.",
+      "",
+      "Workspace summary:",
+      workspaceSummary
+    ].join("\n");
+
+    const response = await this.aiService.generateText(prompt);
+    return {
+      content: response.text,
+      suggestedAction: extractSuggestedAction(response.text)
+    };
+  }
+
+  async continueDebate(task: TaskNode, message: string, workspaceSummary: string): Promise<DebateResponse> {
+    const prompt = [
+      "Continue this planning debate.",
+      `Task: [${task.id}] ${task.title}`,
+      `Task Type: ${task.type}`,
+      "User message:",
+      message,
+      "",
+      "Workspace summary:",
+      workspaceSummary,
+      "Respond with short analysis and a suggested action label at the end."
+    ].join("\n");
+
+    const response = await this.aiService.generateText(prompt);
+    return {
+      content: response.text,
+      suggestedAction: extractSuggestedAction(response.text)
+    };
+  }
+
+  async appendEntry(task: TaskNode, entry: Omit<DebateEntry, "timestamp" | "author"> & { timestamp?: string; author?: string }): Promise<void> {
+    const author = entry.role === "user"
+      ? (entry.author ?? (await this.getAuthorName()))
+      : undefined;
+
+    task.debateLog.push({
+      ...entry,
+      timestamp: entry.timestamp ?? new Date().toISOString(),
+      author
+    });
+  }
+
+  async applyAction(
+    plan: PlanDocument,
+    task: TaskNode,
+    action: DebateAction,
+    payload?: { rewriteTitle?: string; splitTitles?: string[]; splitType?: TaskType }
+  ): Promise<{ changed: boolean; message: string }> {
+    if (action === "accept") {
+      await this.appendEntry(task, { role: "system", content: "Task accepted", action: "accept" });
+      return { changed: true, message: `Task ${task.id} accepted.` };
+    }
+
+    if (action === "rewrite") {
+      const nextTitle = payload?.rewriteTitle?.trim();
+      if (!nextTitle) {
+        return { changed: false, message: "Rewrite requires a title." };
+      }
+      task.title = nextTitle;
+      await this.appendEntry(task, { role: "system", content: `Task rewritten to: ${nextTitle}`, action: "rewrite" });
+      return { changed: true, message: `Task ${task.id} rewritten.` };
+    }
+
+    if (action === "dismiss") {
+      const deleted = deleteTask(plan, task.id);
+      return {
+        changed: deleted,
+        message: deleted ? `Task ${task.id} dismissed and removed.` : `Task ${task.id} could not be removed.`
+      };
+    }
+
+    if (action === "defer") {
+      task.notes = task.notes ? `${task.notes}\n[deferred]` : "[deferred]";
+      await this.appendEntry(task, { role: "system", content: "Task deferred", action: "defer" });
+      return { changed: true, message: `Task ${task.id} deferred.` };
+    }
+
+    if (action === "split") {
+      const splitTitles = (payload?.splitTitles ?? []).map((value) => value.trim()).filter((value) => value.length > 0);
+      if (splitTitles.length === 0) {
+        return { changed: false, message: "Split requires at least one replacement title." };
+      }
+
+      const idFactory = createTaskIdGenerator(plan);
+      const parentId = task.parentId;
+      const parentChildren = parentId ? plan.tasks[parentId]?.children : plan.rootTaskIds;
+      const insertionIndex = parentChildren?.indexOf(task.id) ?? -1;
+
+      const newTasks: TaskNode[] = splitTitles.map((title) => {
+        const next = createTaskNode({
+          id: idFactory(),
+          title,
+          type: payload?.splitType ?? task.type,
+          parentId: task.parentId,
+          origin: "ai-generated",
+          goalRef: task.goalRef,
+          fileSendPolicy: task.fileSendPolicy
+        });
+        next.dependsOn = [...task.dependsOn];
+        next.linkedFiles = [...task.linkedFiles];
+        return next;
+      });
+
+      deleteTask(plan, task.id);
+      for (const newTask of newTasks) {
+        addTask(plan, newTask);
+      }
+
+      if (parentChildren && insertionIndex >= 0) {
+        const ids = newTasks.map((item) => item.id);
+        parentChildren.splice(insertionIndex, 0, ...ids);
+      }
+
+      return {
+        changed: true,
+        message: `Task ${task.id} replaced with ${newTasks.length} split task(s).`
+      };
+    }
+
+    return { changed: false, message: "Unknown debate action." };
+  }
+}
+
+function extractSuggestedAction(text: string): DebateAction | undefined {
+  const match = /Suggested action:\s*(accept|rewrite|split|dismiss|defer)/i.exec(text);
+  if (!match) {
+    return undefined;
+  }
+  return match[1].toLowerCase() as DebateAction;
+}
