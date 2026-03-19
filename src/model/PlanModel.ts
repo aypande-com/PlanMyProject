@@ -1,5 +1,6 @@
 import {
   type FileSendPolicy,
+  normalizeTaskTitle,
   type TaskNode,
   type TaskStatus,
   type TaskType,
@@ -34,9 +35,10 @@ export function createTaskNode(input: {
   fileSendPolicy?: FileSendPolicy;
 }): TaskNode {
   const timestamp = input.createdAt ?? new Date().toISOString();
+  const title = normalizeTaskTitle(input.title);
   return {
     id: input.id,
-    title: input.title,
+    title,
     type: input.type ?? "implementation",
     status: "todo",
     parentId: input.parentId ?? null,

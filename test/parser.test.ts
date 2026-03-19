@@ -73,3 +73,40 @@ test("serializePlanMarkdown keeps empty plan tree without synthetic root tasks",
   assert.equal(parsed.plan.rootTaskIds.length, 0);
   assert.equal(Object.keys(parsed.plan.tasks).length, 0);
 });
+
+test("parsePlanMarkdown normalizes repeated leading marker icons in task titles", () => {
+  const markdown = [
+    "# Project Plan",
+    "",
+    "<!-- pmp:schema=v2 -->",
+    "",
+    "## Goals",
+    "",
+    "- [G0001] Track stocks offline",
+    "",
+    "## Plan Tree",
+    "",
+    "- [ ] [T0008] ⚙️ ⚙️ ⚙️ ⚙️ ⚙️ 🔍 Research local-first persistence options for selected stocks and cached quotes",
+    "  <!-- pmp:id=T0008;parent=ROOT;type=implementation;origin=manual;goalRef=G0001;confidence=null;dependsOn=[];linkedFiles=[];fileSendPolicy=global -->",
+    "",
+    "## Execution Queue (Auto-Generated, Leaf Tasks Only)",
+    "",
+    "### ⚠️ Blocked (Research incomplete)",
+    "(none)",
+    "",
+    "### 🔍 Research Tasks (act first)",
+    "(none)",
+    "",
+    "### ⚙️ Ready to Implement",
+    "1. [T0008] ⚙️ Placeholder"
+  ].join("\n");
+
+  const parsed = parsePlanMarkdown(markdown);
+  const task = parsed.plan.tasks["T0008"];
+  assert.ok(task);
+  assert.equal(task.title, "Research local-first persistence options for selected stocks and cached quotes");
+
+  const serialized = serializePlanMarkdown(parsed.plan, { researchGate: true, showRationaleInline: true });
+  assert.match(serialized, /- \[ \] \[T0008\] ⚙️ Research local-first persistence options for selected stocks and cached quotes/);
+  assert.doesNotMatch(serialized, /⚙️\s+⚙️/);
+});

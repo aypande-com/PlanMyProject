@@ -9,6 +9,7 @@ import {
   type TaskNode,
   type TaskType,
   TASK_TYPE_ICONS,
+  normalizeTaskTitle,
   normalizeTaskStatusSymbol,
   taskStatusToSymbol
 } from "../model/index";
@@ -17,7 +18,7 @@ import { buildExecutionQueue } from "../queue/QueueBuilder";
 const PLAN_TREE_HEADING_RE = /^##\s+Plan Tree\s*$/i;
 const GOALS_HEADING_RE = /^##\s+Goals\s*$/i;
 const QUEUE_HEADING_RE = /^##\s+Execution Queue\b/i;
-const TASK_LINE_RE = /^(\s*)- \[( |\/|x|X)\] \[([A-Za-z0-9_-]+)\]\s+(?:[🔍⚙️⚖️🏁]\s+)?(.+?)\s*$/;
+const TASK_LINE_RE = /^(\s*)- \[( |\/|x|X)\] \[([A-Za-z0-9_-]+)\]\s+(?:[🔍⚙️⚖️🏁]\s*)*(.+?)\s*$/;
 const GOAL_LINE_RE = /^\s*-\s+\[(G\d+)\]\s+(.+?)\s*$/;
 const GOAL_HEADER_COMMENT_RE = /^<!--\s*pmp:goal:id=([^;]+);statement=(.+?)(?:;scanned=(.+?))?\s*-->$/;
 
@@ -509,10 +510,6 @@ function inferTaskType(title: string): TaskType {
     return "milestone";
   }
   return "implementation";
-}
-
-function normalizeTaskTitle(title: string): string {
-  return title.replace(/^(Research|Decision|Implement|Milestone):\s*/i, "").trim();
 }
 
 function isTaskType(value: string): value is TaskType {

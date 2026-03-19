@@ -64,3 +64,25 @@ export function taskStatusToSymbol(status: TaskStatus): " " | "/" | "x" {
 export function isResearchLikeTask(type: TaskType): boolean {
   return type === "research" || type === "decision";
 }
+
+export function normalizeTaskTitle(input: string): string {
+  const original = input.replace(/\s+/g, " ").trim();
+  if (!original) {
+    return "";
+  }
+
+  let normalized = original;
+  while (true) {
+    const next = normalized
+      .replace(/^(?:[🔍⚙️⚖️🏁]\s*)+/u, "")
+      .replace(/^(?:Research|Decision|Implement|Implementation|Milestone):\s*/i, "")
+      .trim();
+
+    if (next === normalized) {
+      break;
+    }
+    normalized = next;
+  }
+
+  return normalized || original;
+}

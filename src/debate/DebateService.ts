@@ -2,6 +2,7 @@ import {
   addTask,
   createTaskNode,
   deleteTask,
+  normalizeTaskTitle,
   type DebateEntry,
   type PlanDocument,
   type TaskNode,
@@ -141,11 +142,11 @@ export class DebateService {
       if (!nextTitle) {
         return { changed: false, message: "Rewrite requires a title." };
       }
-      task.title = nextTitle;
+      task.title = normalizeTaskTitle(nextTitle);
       if (payload?.rewrittenRationale?.trim()) {
         task.rationale = payload.rewrittenRationale.trim();
       }
-      await this.appendEntry(task, { role: "system", content: `Task rewritten to: ${nextTitle}`, action: "rewrite" });
+      await this.appendEntry(task, { role: "system", content: `Task rewritten to: ${task.title}`, action: "rewrite" });
       return { changed: true, message: `Task ${task.id} rewritten.` };
     }
 
