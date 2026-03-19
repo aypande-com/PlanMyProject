@@ -54,3 +54,22 @@ test("parsePlanMarkdown detects v1 schema marker", () => {
   assert.equal(parsed.schemaVersion, "v1");
   assert.ok(parsed.plan.tasks["T0001"]);
 });
+
+test("serializePlanMarkdown keeps empty plan tree without synthetic root tasks", () => {
+  const plan = createEmptyPlanDocument();
+  plan.goals.push({
+    id: "G0001",
+    statement: "Ship MVP",
+    successCriteria: [],
+    constraints: [],
+    outOfScope: []
+  });
+
+  const markdown = serializePlanMarkdown(plan, { researchGate: true, showRationaleInline: true });
+  assert.match(markdown, /\(no tasks yet - set a project goal to get starter suggestions, or add a root task\)/);
+  assert.doesNotMatch(markdown, /\[T0001\].+Add your first objective/i);
+
+  const parsed = parsePlanMarkdown(markdown);
+  assert.equal(parsed.plan.rootTaskIds.length, 0);
+  assert.equal(Object.keys(parsed.plan.tasks).length, 0);
+});

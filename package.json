@@ -147,19 +147,35 @@
       },
       {
         "command": "planmyproject.setProjectGoal",
-        "title": "PlanMyProject: Set Project Goal"
+        "title": "PlanMyProject: Set Project Goal",
+        "icon": {
+          "light": "media/goal.svg",
+          "dark": "media/goal.svg"
+        }
       },
       {
         "command": "planmyproject.refreshScan",
-        "title": "PlanMyProject: Refresh Scan"
+        "title": "PlanMyProject: Refresh Scan",
+        "icon": {
+          "light": "media/scan.svg",
+          "dark": "media/scan.svg"
+        }
       },
       {
         "command": "planmyproject.debateTask",
-        "title": "PlanMyProject: Debate Task"
+        "title": "PlanMyProject: Debate Task",
+        "icon": {
+          "light": "media/debate.svg",
+          "dark": "media/debate.svg"
+        }
       },
       {
         "command": "planmyproject.markResearchComplete",
-        "title": "PlanMyProject: Mark Research Complete"
+        "title": "PlanMyProject: Mark Research Complete",
+        "icon": {
+          "light": "media/complete.svg",
+          "dark": "media/complete.svg"
+        }
       },
       {
         "command": "planmyproject.showTaskRationale",
@@ -187,11 +203,19 @@
       },
       {
         "command": "planmyproject.setTaskFileSendPolicy",
-        "title": "PlanMyProject: Set Task File Send Policy"
+        "title": "PlanMyProject: Set Task File Send Policy",
+        "icon": {
+          "light": "media/policy.svg",
+          "dark": "media/policy.svg"
+        }
       },
       {
         "command": "planmyproject.scanTask",
-        "title": "PlanMyProject: Scan Task"
+        "title": "PlanMyProject: Scan Task",
+        "icon": {
+          "light": "media/scan.svg",
+          "dark": "media/scan.svg"
+        }
       }
     ],
     "keybindings": [

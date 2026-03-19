@@ -92,9 +92,9 @@ When using AI tools like Copilot or Claude for development, you face three key c
    - Enter your goal statement, success criteria, constraints, out-of-scope items
    - Click "Save"
 
-3. **Add a root task**. In the PlanMyProject tree (left sidebar under "Plan"), click the "Add Root Task" link (or run `PlanMyProject: Add Root Task` from the command palette).
-   - Example: `"Build user authentication system"`
-   - Choose task type: **Research** (if you need to investigate), **Implementation** (if it's straightforward), or **Decision** (if it's an architectural choice)
+3. **Select starter root tasks**. Right after saving the goal, PlanMyProject suggests high-level root tasks.
+   - Pick the suggestions you want as a starting point
+   - Or skip and add one manually anytime with `PlanMyProject: Add Root Task`
 
 4. **Plan the task**. Select the task in the tree, then run `PlanMyProject: Plan Task (One Level)` (or press `Alt+P`).
    - The extension scans your workspace, analyzes your goal, and generates child tasks
@@ -718,7 +718,7 @@ This is expected behavior. All debate history is permanent in the plan file. If 
 Now that you understand the extension:
 
 1. **Set up a project goal:** `PlanMyProject: Set Project Goal`
-2. **Create a root task:** `PlanMyProject: Add Root Task`
+2. **Pick suggested starter tasks** (shown after setting a goal), or add one manually with `PlanMyProject: Add Root Task`
 3. **Plan it:** `Alt+P` or `PlanMyProject: Plan Task`
 4. **Debate a task:** Right-click any task → "Debate Task"
 5. **Implement:** Select a ready task and click "Implement"
@@ -738,5 +738,5 @@ Happy planning! 🚀
 
 ---
 
-*Last Updated: 2026-03-19*  
+*Last Updated: 2026-03-20*  
 *Version: PlanMyProject v2.0.0*
