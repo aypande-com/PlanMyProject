@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { TASK_TYPE_ICONS, type PlanDocument, type TaskNode, type WorkspaceScan } from "../model";
-import { isTaskBlocked } from "../model";
+import { TASK_TYPE_ICONS, type PlanDocument, type TaskNode, type WorkspaceScan } from "../model/index";
+import { isTaskBlocked } from "../model/index";
 
 interface RequestStatus {
   taskId: string;
@@ -33,17 +33,20 @@ class TaskTreeItem extends vscode.TreeItem {
     requestStatus: RequestStatus | undefined,
     researchGate: boolean
   ) {
+    const blocked = isTaskBlocked(plan, task.id, researchGate);
+
     super(
-      `${TASK_TYPE_ICONS[task.type]} ${task.title}`,
+      `${blocked ? "🔒 " : ""}${TASK_TYPE_ICONS[task.type]} ${task.title}`,
       task.children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
     );
 
-    const blocked = isTaskBlocked(plan, task.id, researchGate);
     const confidence = task.confidence === null ? "n/a" : `${Math.round(task.confidence * 100)}%`;
+    const confidenceBadge = formatConfidenceBadge(task);
+    const originBadge = formatOriginBadge(task);
     const requestDetail = requestStatus?.taskId === task.id ? ` • ${requestStatus.detail}` : "";
 
     this.id = task.id;
-    this.description = `${task.id} • ${task.origin}${blocked ? " • blocked" : ""}${requestDetail}`;
+    this.description = `${task.id} • ${originBadge}${confidenceBadge ? ` • ${confidenceBadge}` : ""}${blocked ? " • blocked" : ""}${requestDetail}`;
     this.tooltip = [
       `${task.id} [${task.status}] ${task.type}`,
       `Goal: ${task.goalRef ?? "none"}`,
@@ -178,4 +181,27 @@ function iconForTask(task: TaskNode, requestStatus: RequestStatus | undefined): 
   }
 
   return new vscode.ThemeIcon("circle-large-outline");
+}
+
+function formatOriginBadge(task: TaskNode): string {
+  if (task.origin === "ai-generated") {
+    return "AI";
+  }
+  if (task.origin === "code-inferred") {
+    return "INF";
+  }
+  return "ME";
+}
+
+function formatConfidenceBadge(task: TaskNode): string | undefined {
+  if (task.origin !== "ai-generated" || task.confidence === null) {
+    return undefined;
+  }
+  if (task.confidence >= 0.8) {
+    return "🟢";
+  }
+  if (task.confidence >= 0.5) {
+    return "🟡";
+  }
+  return "🔴";
 }

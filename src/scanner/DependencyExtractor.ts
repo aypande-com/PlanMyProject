@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { ExternalDep } from "../model";
+import type { ExternalDep } from "../model/index";
 
 export async function extractDependencies(root: vscode.Uri): Promise<ExternalDep[]> {
   const dependencies: ExternalDep[] = [];

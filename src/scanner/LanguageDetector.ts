@@ -1,4 +1,4 @@
-import type { LanguageInfo } from "../model";
+import type { LanguageInfo } from "../model/index";
 
 const EXT_LANGUAGE: Record<string, string> = {
   ".ts": "TypeScript",

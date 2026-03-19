@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { DebateEntry, TaskNode } from "../model";
+import type { DebateEntry, TaskNode } from "../model/index";
 import { ensurePmpDir, getDebateArchiveDirUri, writeTextFile } from "../storage";
 
 export interface DebateArchiveResult {

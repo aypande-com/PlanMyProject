@@ -405,8 +405,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "rm -rf out && tsc -p ./",
+    "watch": "rm -rf out && tsc -watch -p ./",
     "test:build": "rm -rf out-test && tsc -p ./tsconfig.test.json",
     "test": "npm run test:build && NODE_PATH=./test/shims node --test out-test/test/**/*.test.js",
     "test:coverage": "npm run test:build && NODE_PATH=./test/shims node --test --experimental-test-coverage out-test/test/**/*.test.js",

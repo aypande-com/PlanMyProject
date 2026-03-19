@@ -30,17 +30,20 @@ export class PlanStatusBar implements vscode.Disposable {
 
   private render(): void {
     if (this.activeRequest) {
+      this.item.command = "planmyproject.refreshScan";
       this.item.text = "$(sync~spin) PlanMyProject: AI request running";
       this.item.tooltip = "An AI request is in progress. Click to refresh scan after completion.";
       return;
     }
 
     if (this.missingGoal) {
+      this.item.command = "planmyproject.setProjectGoal";
       this.item.text = "$(warning) PlanMyProject: No project goal set";
-      this.item.tooltip = "Click to run Refresh Scan. Use Set Project Goal to add one.";
+      this.item.tooltip = "Click to open Set Project Goal.";
       return;
     }
 
+    this.item.command = "planmyproject.refreshScan";
     if (this.scanTimestamp) {
       const ago = formatAgo(this.scanTimestamp);
       this.item.text = `$(search) PlanMyProject: Scanned ${ago}`;

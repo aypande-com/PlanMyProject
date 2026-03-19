@@ -1,4 +1,4 @@
-import { type ResearchIndexEntry, type TaskNode } from "../model";
+import { type ResearchIndexEntry, type TaskNode } from "../model/index";
 import { ensurePmpDir, getResearchIndexUri, readTextFile, uriExists, writeTextFile } from "../storage";
 import { extractTags } from "./TagExtractor";
 

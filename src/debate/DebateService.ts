@@ -6,7 +6,7 @@ import {
   type PlanDocument,
   type TaskNode,
   type TaskType
-} from "../model";
+} from "../model/index";
 import { createTaskIdGenerator } from "../util";
 import type { AIService } from "../ai/AIService";
 
@@ -62,6 +62,57 @@ export class DebateService {
     };
   }
 
+  async suggestSplitTitles(task: TaskNode, workspaceSummary: string): Promise<string[]> {
+    const prompt = [
+      "Propose 2-4 focused child tasks to split this task.",
+      `Task: [${task.id}] ${task.title}`,
+      `Task Type: ${task.type}`,
+      "Return JSON only with shape: {\"titles\":[\"...\"]}.",
+      "Titles must be concise and non-overlapping.",
+      "",
+      "Workspace summary:",
+      workspaceSummary
+    ].join("\n");
+
+    const response = await this.aiService.generateText(prompt);
+    const match = /\{[\s\S]*\}/.exec(response.text);
+    if (!match) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(match[0]) as { titles?: unknown };
+      if (!Array.isArray(parsed.titles)) {
+        return [];
+      }
+      return parsed.titles
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+        .slice(0, 6);
+    } catch {
+      return [];
+    }
+  }
+
+  async regenerateRationale(task: TaskNode, rewrittenTitle: string, workspaceSummary: string): Promise<string | undefined> {
+    const prompt = [
+      "Regenerate rationale for this rewritten task title.",
+      `Task ID: ${task.id}`,
+      `Original Title: ${task.title}`,
+      `Rewritten Title: ${rewrittenTitle}`,
+      `Task Type: ${task.type}`,
+      "Return plain text only, max 2 sentences.",
+      "",
+      "Workspace summary:",
+      workspaceSummary
+    ].join("\n");
+
+    const response = await this.aiService.generateText(prompt);
+    const rationale = response.text.trim();
+    return rationale || undefined;
+  }
+
   async appendEntry(task: TaskNode, entry: Omit<DebateEntry, "timestamp" | "author"> & { timestamp?: string; author?: string }): Promise<void> {
     const author = entry.role === "user"
       ? (entry.author ?? (await this.getAuthorName()))
@@ -78,7 +129,7 @@ export class DebateService {
     plan: PlanDocument,
     task: TaskNode,
     action: DebateAction,
-    payload?: { rewriteTitle?: string; splitTitles?: string[]; splitType?: TaskType }
+    payload?: { rewriteTitle?: string; rewrittenRationale?: string; splitTitles?: string[]; splitType?: TaskType }
   ): Promise<{ changed: boolean; message: string }> {
     if (action === "accept") {
       await this.appendEntry(task, { role: "system", content: "Task accepted", action: "accept" });
@@ -91,6 +142,9 @@ export class DebateService {
         return { changed: false, message: "Rewrite requires a title." };
       }
       task.title = nextTitle;
+      if (payload?.rewrittenRationale?.trim()) {
+        task.rationale = payload.rewrittenRationale.trim();
+      }
       await this.appendEntry(task, { role: "system", content: `Task rewritten to: ${nextTitle}`, action: "rewrite" });
       return { changed: true, message: `Task ${task.id} rewritten.` };
     }

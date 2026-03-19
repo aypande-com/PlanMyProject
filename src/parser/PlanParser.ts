@@ -11,7 +11,7 @@ import {
   TASK_TYPE_ICONS,
   normalizeTaskStatusSymbol,
   taskStatusToSymbol
-} from "../model";
+} from "../model/index";
 import { buildExecutionQueue } from "../queue/QueueBuilder";
 
 const PLAN_TREE_HEADING_RE = /^##\s+Plan Tree\s*$/i;
@@ -105,8 +105,7 @@ export function serializePlanMarkdown(plan: PlanDocument, options?: Partial<Seri
   lines.push("");
 
   if (nextPlan.rootTaskIds.length === 0) {
-    lines.push("- [ ] [T0001] ⚙️ Add your first objective");
-    lines.push("  <!-- pmp:id=T0001;parent=ROOT;type=implementation;origin=manual;goalRef=null;confidence=null;dependsOn=[];linkedFiles=[];fileSendPolicy=global -->");
+    lines.push("(no tasks yet - set a project goal to get starter suggestions, or add a root task)");
   } else {
     for (const rootId of nextPlan.rootTaskIds) {
       renderTask(lines, nextPlan, rootId, 0, resolved.showRationaleInline);

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { createEmptyPlanDocument, type PlanDocument } from "../model";
+import { createEmptyPlanDocument, type PlanDocument } from "../model/index";
 import { parsePlanMarkdown, serializePlanMarkdown } from "../parser/PlanParser";
 import {
   DEFAULT_PLAN_FILENAME,

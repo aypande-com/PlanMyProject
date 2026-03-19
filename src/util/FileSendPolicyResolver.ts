@@ -1,4 +1,4 @@
-import type { FileSendPolicy } from "../model";
+import type { FileSendPolicy } from "../model/index";
 
 export type ResolvedFileSendPolicy = "send" | "dont-send" | "ask";
 

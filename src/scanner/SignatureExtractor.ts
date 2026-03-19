@@ -1,4 +1,4 @@
-import type { SignatureSummary } from "../model";
+import type { SignatureSummary } from "../model/index";
 import { detectLanguageFromPath } from "./LanguageDetector";
 
 const TODO_PATTERN = /\b(TODO|FIXME|HACK)\b[:\-]?\s*(.+)?/gi;

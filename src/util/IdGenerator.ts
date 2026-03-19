@@ -1,4 +1,4 @@
-import type { PlanDocument } from "../model";
+import type { PlanDocument } from "../model/index";
 
 export function createTaskIdGenerator(plan: PlanDocument): () => string {
   let max = 0;

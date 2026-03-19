@@ -1,5 +1,5 @@
 import * as path from "path";
-import type { ModuleInfo, SignatureSummary } from "../model";
+import type { ModuleInfo, SignatureSummary } from "../model/index";
 
 export function groupFilesIntoModules(filePaths: string[], signaturesByFile: Map<string, SignatureSummary>): ModuleInfo[] {
   const grouped = new Map<string, string[]>();

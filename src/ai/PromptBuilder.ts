@@ -1,5 +1,5 @@
 import type { GeneratedTaskDraft } from "./types";
-import { TASK_TYPE_ICONS, type ProjectGoal, type ResearchIndexEntry, type TaskNode, type WorkspaceScan } from "../model";
+import { TASK_TYPE_ICONS, type ProjectGoal, type ResearchIndexEntry, type TaskNode, type WorkspaceScan } from "../model/index";
 
 export interface TaskGenerationPromptInput {
   goal: ProjectGoal | undefined;

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { ProjectGoal } from "../model";
+import type { ProjectGoal } from "../model/index";
 import { createGoalIdGenerator } from "../util";
 
 export class GoalSetupPanel {

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { EMPTY_WORKSPACE_SCAN, type WorkspaceScan } from "../model";
+import { EMPTY_WORKSPACE_SCAN, type WorkspaceScan } from "../model/index";
 import { ensurePmpDir, getScanCacheUri, readTextFile, uriExists, writeTextFile } from "./WorkspaceFiles";
 
 export class ScanCacheStore {

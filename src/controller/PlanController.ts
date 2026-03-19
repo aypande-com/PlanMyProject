@@ -14,9 +14,9 @@ import {
   type TaskNode,
   type TaskType,
   type WorkspaceScan
-} from "../model";
+} from "../model/index";
 import { parsePlanMarkdown, upgradeSchemaV1ToV2 } from "../parser";
-import { PlanRepository, ScanCacheStore, findPlanUris, getGitUserName, getWorkspaceRootUri, hasOpenWorkspace, readTextFile, uriExists } from "../storage";
+import { PlanRepository, ScanCacheStore, findPlanUris, getGitUserName, getWorkspaceRootUri, hasOpenWorkspace, readTextFile, uriExists, writeTextFile } from "../storage";
 import { buildImplementationPrompt, summarizeDraftTasks } from "../ai/PromptBuilder";
 import { parseImplementationResponse } from "../ai/ResponseParser";
 import { AIService } from "../ai/AIService";
@@ -24,16 +24,25 @@ import { TaskGenerator } from "../generation";
 import { WorkspaceScanner } from "../scanner";
 import { ResearchIndex } from "../research";
 import { DebateArchiver, DebatePanel, DebateService, type DebateAction } from "../debate";
-import { createGoalIdGenerator, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath } from "../util";
+import { createGoalIdGenerator, createTaskIdGenerator, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath } from "../util";
 import { GoalSetupPanel, PlanStatusBar, PlanTreeProvider } from "../ui";
 
 const ACTIVE_REQUEST_CLEAR_MS = 2200;
 const MAX_LINKED_FILE_CONTENT_BYTES = 45_000;
 const MAX_LINKED_FILES_IN_PROMPT = 8;
+const CONSENT_STATE_KEY = "planmyproject.sessionAllowAllConsent";
+const LAST_SCAN_STATE_KEY = "planmyproject.lastScanTimestamp";
+const GITIGNORE_SUGGESTION_STATE_KEY = "planmyproject.gitignoreSuggestionDismissed";
 
 interface TaskCommandRef {
   taskId?: string;
   fileUri?: vscode.Uri;
+}
+
+interface StarterTaskSuggestion {
+  title: string;
+  type: TaskType;
+  detail: string;
 }
 
 export class PlanController implements vscode.Disposable {
@@ -55,6 +64,7 @@ export class PlanController implements vscode.Disposable {
 
   private activeRequest: vscode.CancellationTokenSource | undefined;
   private sessionAllowAllConsent = false;
+  private readonly warnedDebateConflicts = new Set<string>();
 
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -79,8 +89,10 @@ export class PlanController implements vscode.Disposable {
     this.registerWatchers();
 
     this.scan = await this.scanCacheStore.load();
+    this.sessionAllowAllConsent = this.context.workspaceState.get<boolean>(CONSENT_STATE_KEY, false);
+    const lastScanFromState = this.context.workspaceState.get<string>(LAST_SCAN_STATE_KEY);
     this.treeProvider.setWorkspaceScan(this.scan);
-    this.statusBar.setScanTimestamp(this.scan?.scannedAt);
+    this.statusBar.setScanTimestamp(this.scan?.scannedAt ?? lastScanFromState);
 
     await this.refreshPlanState();
   }
@@ -129,7 +141,7 @@ export class PlanController implements vscode.Disposable {
     register("planmyproject.viewResearchIndex", async () => this.viewResearchIndex());
     register("planmyproject.viewDebateArchive", async (arg) => this.viewDebateArchive(arg));
     register("planmyproject.setTaskFileSendPolicy", async (arg) => this.setTaskFileSendPolicy(arg));
-    register("planmyproject.scanTask", async () => this.refreshScan());
+    register("planmyproject.scanTask", async (arg) => this.scanTask(arg));
   }
 
   private registerWatchers(): void {
@@ -164,11 +176,16 @@ export class PlanController implements vscode.Disposable {
     const doc = await vscode.workspace.openTextDocument(uri);
     await vscode.window.showTextDocument(doc, { preview: false });
     await this.refreshPlanState();
+
+    if (!this.scan) {
+      await this.refreshScan({ quiet: true });
+    }
   }
 
   private async refreshPlanState(): Promise<void> {
     const loaded = await this.repository.loadPlan();
     this.planUri = loaded.uri;
+    this.warnDebateConflicts(loaded.parsed.debateConflicts);
 
     if (loaded.parsed.schemaVersion === "v1") {
       const migrated = await this.tryMigrateV1(loaded.uri);
@@ -243,7 +260,7 @@ export class PlanController implements vscode.Disposable {
     }
 
     const parent = forceRoot ? undefined : this.resolveTaskFromArg(arg);
-    const createId = (await import("../util")).createTaskIdGenerator(this.plan);
+    const createId = createTaskIdGenerator(this.plan);
     const task = createTaskNode({
       id: createId(),
       title: title.trim(),
@@ -387,6 +404,10 @@ export class PlanController implements vscode.Disposable {
       void vscode.window.showWarningMessage("No task selected.");
       return;
     }
+    if (task.type !== "implementation") {
+      void vscode.window.showWarningMessage(`Task ${task.id} is ${task.type}. Only implementation tasks can run Implement Task.`);
+      return;
+    }
 
     const researchGate = this.getConfiguration().get<boolean>("researchGate", true);
     if (isTaskBlocked(this.plan, task.id, researchGate)) {
@@ -442,6 +463,11 @@ export class PlanController implements vscode.Disposable {
         }
       }
 
+      const shouldProceed = await this.confirmWriteToCompleteFiles(parsed.changes.map((change) => change.path));
+      if (!shouldProceed) {
+        throw new Error("Cancelled");
+      }
+
       const root = getWorkspaceRootUri();
       for (const change of parsed.changes) {
         const targetPath = await resolveSafeTargetPath(root.fsPath, change.path);
@@ -450,7 +476,7 @@ export class PlanController implements vscode.Disposable {
         await vscode.workspace.fs.writeFile(targetUri, Buffer.from(change.content, "utf8"));
       }
 
-      markTaskStatus(this.plan as PlanDocument, task.id, "done");
+      markTaskStatus(this.plan as PlanDocument, task.id, parsed.taskCompleted ? "done" : "in-progress");
       await this.persistAndRefresh();
 
       if (this.getConfiguration().get<boolean>("autoRescanOnImplement", true)) {
@@ -520,7 +546,11 @@ export class PlanController implements vscode.Disposable {
       }
     }
 
+    const starterCount = await this.maybeSuggestStarterRootTasks(goal);
     await this.persistAndRefresh();
+    if (starterCount > 0) {
+      void vscode.window.showInformationMessage(`Added goal ${goal.id} with ${starterCount} starter root task(s).`);
+    }
   }
 
   private async refreshScan(options?: { quiet?: boolean }): Promise<void> {
@@ -551,6 +581,8 @@ export class PlanController implements vscode.Disposable {
     });
 
     await this.scanCacheStore.save(this.scan);
+    await this.context.workspaceState.update(LAST_SCAN_STATE_KEY, this.scan.scannedAt);
+    await this.maybeSuggestGitignoreEntry();
     this.treeProvider.setWorkspaceScan(this.scan);
     this.statusBar.setActiveRequest(false);
     this.statusBar.setScanTimestamp(this.scan.scannedAt);
@@ -559,6 +591,27 @@ export class PlanController implements vscode.Disposable {
     if (!options?.quiet) {
       void vscode.window.showInformationMessage(`Workspace scan complete: ${this.scan.modules.length} module(s).`);
     }
+  }
+
+  private async scanTask(arg: unknown): Promise<void> {
+    if (!this.plan) {
+      await this.refreshPlanState();
+    }
+    const task = this.resolveTaskFromArg(arg);
+    await this.refreshScan({ quiet: true });
+
+    if (!task) {
+      void vscode.window.showInformationMessage("Workspace scan refreshed.");
+      return;
+    }
+
+    const linkedCount = task.linkedFiles.length;
+    if (linkedCount === 0) {
+      void vscode.window.showInformationMessage(`Workspace scan refreshed for ${task.id}. No linked files on this task.`);
+      return;
+    }
+
+    void vscode.window.showInformationMessage(`Workspace scan refreshed for ${task.id} (${linkedCount} linked file${linkedCount === 1 ? "" : "s"}).`);
   }
 
   private async debateTask(arg: unknown): Promise<void> {
@@ -586,17 +639,19 @@ export class PlanController implements vscode.Disposable {
         await this.persistAndRefresh();
       },
       onAction: async (action) => {
-        await this.handleDebateAction(task, action);
+        await this.handleDebateAction(task, action, summary);
       }
     });
 
-    const opening = await this.debateService.generateOpening(task, summary);
-    await this.debateService.appendEntry(task, { role: "ai", content: opening.content });
-    this.debatePanel.postAssistantMessage(opening.content);
-    await this.persistAndRefresh();
+    if (task.debateLog.length === 0) {
+      const opening = await this.debateService.generateOpening(task, summary);
+      await this.debateService.appendEntry(task, { role: "ai", content: opening.content });
+      this.debatePanel.postAssistantMessage(opening.content);
+      await this.persistAndRefresh();
+    }
   }
 
-  private async handleDebateAction(task: TaskNode, action: DebateAction): Promise<void> {
+  private async handleDebateAction(task: TaskNode, action: DebateAction, workspaceSummary: string): Promise<void> {
     if (!this.plan) {
       return;
     }
@@ -607,7 +662,11 @@ export class PlanController implements vscode.Disposable {
         return;
       }
 
-      const result = await this.debateService.applyAction(this.plan, task, action, { rewriteTitle: nextTitle });
+      const rewrittenRationale = await this.debateService.regenerateRationale(task, nextTitle, workspaceSummary);
+      const result = await this.debateService.applyAction(this.plan, task, action, {
+        rewriteTitle: nextTitle,
+        rewrittenRationale
+      });
       if (result.changed) {
         await this.persistAndRefresh();
       }
@@ -616,15 +675,36 @@ export class PlanController implements vscode.Disposable {
     }
 
     if (action === "split") {
-      const titlesText = await vscode.window.showInputBox({
-        prompt: `Split ${task.id} into 2-4 tasks (comma-separated titles)`,
-        placeHolder: "Research API contract, Implement API handler, Add tests"
-      });
-      if (!titlesText?.trim()) {
-        return;
+      const suggestedTitles = await this.debateService.suggestSplitTitles(task, workspaceSummary);
+      let splitTitles: string[] = [];
+
+      if (suggestedTitles.length > 0) {
+        const picked = await vscode.window.showQuickPick(
+          suggestedTitles.map((title) => ({
+            label: title
+          })),
+          {
+            canPickMany: true,
+            placeHolder: `Select split tasks for ${task.id}`
+          }
+        );
+        if (!picked) {
+          return;
+        }
+        splitTitles = picked.map((item) => item.label);
       }
 
-      const splitTitles = titlesText.split(",").map((value) => value.trim()).filter((value) => value.length > 0);
+      if (splitTitles.length === 0) {
+        const titlesText = await vscode.window.showInputBox({
+          prompt: `Split ${task.id} into 2-4 tasks (comma-separated titles)`,
+          placeHolder: "Research API contract, Implement API handler, Add tests"
+        });
+        if (!titlesText?.trim()) {
+          return;
+        }
+        splitTitles = titlesText.split(",").map((value) => value.trim()).filter((value) => value.length > 0);
+      }
+
       const result = await this.debateService.applyAction(this.plan, task, action, { splitTitles });
       if (result.changed) {
         await this.persistAndRefresh();
@@ -735,8 +815,10 @@ export class PlanController implements vscode.Disposable {
       }
     }
 
+    const starterCount = await this.maybeSuggestStarterRootTasks(goal);
     await this.persistAndRefresh();
-    void vscode.window.showInformationMessage(`Imported goal ${goal.id} from ${selected.label}.`);
+    const starterSuffix = starterCount > 0 ? ` Added ${starterCount} starter root task(s).` : "";
+    void vscode.window.showInformationMessage(`Imported goal ${goal.id} from ${selected.label}.${starterSuffix}`);
   }
 
   private async exportPlanSummary(): Promise<void> {
@@ -1028,6 +1110,89 @@ export class PlanController implements vscode.Disposable {
     return snapshots;
   }
 
+  private warnDebateConflicts(conflictedTaskIds: string[]): void {
+    for (const taskId of conflictedTaskIds) {
+      if (this.warnedDebateConflicts.has(taskId)) {
+        continue;
+      }
+      this.warnedDebateConflicts.add(taskId);
+      void vscode.window.showWarningMessage(`Debate log conflict detected on ${taskId}. Please resolve in the plan file.`);
+    }
+  }
+
+  private async confirmWriteToCompleteFiles(paths: string[]): Promise<boolean> {
+    if (!this.scan || paths.length === 0) {
+      return true;
+    }
+
+    const completeFiles = new Set(
+      this.scan.modules
+        .filter((module) => module.estimatedCompletion === "complete")
+        .flatMap((module) => module.files.map((file) => file.replace(/\\/g, "/").toLowerCase()))
+    );
+    if (completeFiles.size === 0) {
+      return true;
+    }
+
+    const overwrites = paths
+      .map((item) => item.replace(/\\/g, "/").toLowerCase())
+      .filter((item) => completeFiles.has(item));
+    if (overwrites.length === 0) {
+      return true;
+    }
+
+    const preview = overwrites.slice(0, 3).join(", ");
+    const extra = overwrites.length > 3 ? ` (+${overwrites.length - 3} more)` : "";
+    const decision = await vscode.window.showWarningMessage(
+      `AI output will overwrite ${overwrites.length} file(s) currently marked complete by scan: ${preview}${extra}. Continue?`,
+      { modal: true },
+      "Apply"
+    );
+    return decision === "Apply";
+  }
+
+  private async maybeSuggestGitignoreEntry(): Promise<void> {
+    const config = this.getConfiguration();
+    if (!config.get<boolean>("gitignorePmpDir", true)) {
+      return;
+    }
+    if (this.context.workspaceState.get<boolean>(GITIGNORE_SUGGESTION_STATE_KEY, false)) {
+      return;
+    }
+
+    const root = getWorkspaceRootUri();
+    const gitignoreUri = vscode.Uri.joinPath(root, ".gitignore");
+    let content = "";
+
+    if (await uriExists(gitignoreUri)) {
+      content = await readTextFile(gitignoreUri);
+      if (/(^|\n)\s*\.pmp\/scan-cache\.json\s*(\n|$)/.test(content) || /(^|\n)\s*\.pmp\/\s*(\n|$)/.test(content)) {
+        return;
+      }
+    }
+
+    const decision = await vscode.window.showInformationMessage(
+      "Add `.pmp/scan-cache.json` to .gitignore? This scan cache is machine-specific.",
+      "Add",
+      "Not now",
+      "Don't ask again"
+    );
+
+    if (!decision || decision === "Not now") {
+      return;
+    }
+
+    if (decision === "Don't ask again") {
+      await this.context.workspaceState.update(GITIGNORE_SUGGESTION_STATE_KEY, true);
+      return;
+    }
+
+    const next = appendGitignoreLine(content, ".pmp/scan-cache.json");
+    await writeTextFile(gitignoreUri, next);
+    await this.context.workspaceState.update(GITIGNORE_SUGGESTION_STATE_KEY, true);
+    void vscode.window.showInformationMessage("Added `.pmp/scan-cache.json` to .gitignore.");
+  }
+
   private async withActiveRequest(taskId: string, runner: (token: vscode.CancellationToken) => Promise<void>): Promise<void> {
     if (this.activeRequest) {
       this.activeRequest.cancel();
@@ -1082,6 +1247,7 @@ export class PlanController implements vscode.Disposable {
 
     if (decision === "Allow All") {
       this.sessionAllowAllConsent = true;
+      await this.context.workspaceState.update(CONSENT_STATE_KEY, true);
       return true;
     }
 
@@ -1137,6 +1303,118 @@ export class PlanController implements vscode.Disposable {
       constraints: [],
       outOfScope: []
     };
+  }
+
+  private async maybeSuggestStarterRootTasks(goal: ProjectGoal): Promise<number> {
+    if (!this.plan || this.plan.rootTaskIds.length > 0) {
+      return 0;
+    }
+
+    const suggestions = this.buildStarterRootTaskSuggestions(goal);
+    if (suggestions.length === 0) {
+      return 0;
+    }
+
+    const selected = await vscode.window.showQuickPick(
+      suggestions.map((suggestion) => ({
+        label: suggestion.title,
+        description: taskTypeLabel(suggestion.type),
+        detail: suggestion.detail,
+        suggestion
+      })),
+      {
+        canPickMany: true,
+        title: "Suggested Starter Tasks",
+        placeHolder: "Select high-level tasks to add as root tasks"
+      }
+    );
+
+    if (!selected || selected.length === 0) {
+      return 0;
+    }
+
+    const createId = createTaskIdGenerator(this.plan);
+    const fileSendPolicy = this.getConfiguration().get<FileSendPolicy>("defaultTaskFileSendPolicy", "global");
+    const seenTitles = new Set<string>();
+    let createdCount = 0;
+
+    for (const item of selected) {
+      const key = normalizeTaskTitleKey(item.suggestion.title);
+      if (seenTitles.has(key)) {
+        continue;
+      }
+      seenTitles.add(key);
+
+      const task = createTaskNode({
+        id: createId(),
+        title: item.suggestion.title,
+        type: item.suggestion.type,
+        parentId: null,
+        origin: "manual",
+        goalRef: goal.id,
+        fileSendPolicy
+      });
+      addTask(this.plan, task);
+      createdCount += 1;
+    }
+
+    if (createdCount > 0) {
+      recomputeDerivedStatuses(this.plan);
+    }
+
+    return createdCount;
+  }
+
+  private buildStarterRootTaskSuggestions(goal: ProjectGoal): StarterTaskSuggestion[] {
+    const focus = toTaskPhrase(goal.statement, 72) || "the project";
+    const criteria = goal.successCriteria
+      .map((criterion) => toTaskPhrase(criterion, 72))
+      .filter((criterion): criterion is string => criterion.length > 0)
+      .slice(0, 3);
+
+    const suggestions: StarterTaskSuggestion[] = [
+      {
+        title: `Research architecture and technical risks for ${focus}`,
+        type: "research",
+        detail: "Identify unknowns before implementation."
+      },
+      {
+        title: `Decide core scope and system design for ${focus}`,
+        type: "decision",
+        detail: "Capture key product and technical tradeoffs."
+      },
+      {
+        title: `Implement the core user flow for ${focus}`,
+        type: "implementation",
+        detail: "Ship an end-to-end baseline flow."
+      },
+      {
+        title: "Validate delivery against goal success criteria",
+        type: "milestone",
+        detail: "Checkpoint before broad rollout."
+      }
+    ];
+
+    for (const criterion of criteria) {
+      suggestions.splice(2, 0, {
+        title: `Deliver success criterion: ${criterion}`,
+        type: "implementation",
+        detail: "Derived directly from the goal success criteria."
+      });
+    }
+
+    const deduped: StarterTaskSuggestion[] = [];
+    const seen = new Set<string>();
+    for (const suggestion of suggestions) {
+      const key = normalizeTaskTitleKey(suggestion.title);
+      if (!key || seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      deduped.push(suggestion);
+    }
+
+    return deduped.slice(0, 6);
   }
 
   private buildPlanSummaryMarkdown(): string {
@@ -1216,4 +1494,40 @@ export class PlanController implements vscode.Disposable {
     }
     return "Unknown error.";
   }
+}
+
+function appendGitignoreLine(content: string, line: string): string {
+  const trimmed = content.trimEnd();
+  if (!trimmed) {
+    return `${line}\n`;
+  }
+  return `${trimmed}\n${line}\n`;
+}
+
+function taskTypeLabel(type: TaskType): string {
+  if (type === "research") {
+    return "Research";
+  }
+  if (type === "decision") {
+    return "Decision";
+  }
+  if (type === "milestone") {
+    return "Milestone";
+  }
+  return "Implementation";
+}
+
+function normalizeTaskTitleKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function toTaskPhrase(value: string, maxLength: number): string {
+  const cleaned = value
+    .replace(/\s+/g, " ")
+    .replace(/[.?!]+$/g, "")
+    .trim();
+  if (cleaned.length <= maxLength) {
+    return cleaned;
+  }
+  return `${cleaned.slice(0, Math.max(1, maxLength - 3)).trim()}...`;
 }

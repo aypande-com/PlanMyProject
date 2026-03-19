@@ -19,20 +19,8 @@ export class IgnoreMatcher {
 
   static async fromWorkspace(root: vscode.Uri): Promise<IgnoreMatcher> {
     const patterns = [...DEFAULT_IGNORES];
-    try {
-      const ignoreUri = vscode.Uri.joinPath(root, ".pmpignore");
-      const bytes = await vscode.workspace.fs.readFile(ignoreUri);
-      const text = Buffer.from(bytes).toString("utf8");
-      for (const line of text.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) {
-          continue;
-        }
-        patterns.push(trimmed);
-      }
-    } catch {
-      // optional ignore file
-    }
+    await appendIgnoreFilePatterns(root, ".gitignore", patterns);
+    await appendIgnoreFilePatterns(root, ".pmpignore", patterns);
 
     return new IgnoreMatcher(patterns);
   }
@@ -64,6 +52,26 @@ export class IgnoreMatcher {
     }
 
     return false;
+  }
+}
+
+async function appendIgnoreFilePatterns(root: vscode.Uri, fileName: string, patterns: string[]): Promise<void> {
+  try {
+    const ignoreUri = vscode.Uri.joinPath(root, fileName);
+    const bytes = await vscode.workspace.fs.readFile(ignoreUri);
+    const text = Buffer.from(bytes).toString("utf8");
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
+      if (trimmed.startsWith("!")) {
+        continue;
+      }
+      patterns.push(trimmed);
+    }
+  } catch {
+    // optional ignore file
   }
 }
 

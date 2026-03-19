@@ -1,6 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import type { CoverageHint, ProjectGoal, SignatureSummary, WorkspaceScan } from "../model";
+import type { CoverageHint, ProjectGoal, SignatureSummary, WorkspaceScan } from "../model/index";
 import { detectLanguagesByExtension } from "./LanguageDetector";
 import { extractDependencies } from "./DependencyExtractor";
 import { extractSignatures } from "./SignatureExtractor";

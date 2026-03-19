@@ -1,5 +1,5 @@
 import type { GeneratedTaskDraft } from "./types";
-import type { TaskType } from "../model";
+import type { TaskType } from "../model/index";
 import { normalizeWorkspaceRelativePath } from "../util";
 
 export interface GeneratedTaskSet {

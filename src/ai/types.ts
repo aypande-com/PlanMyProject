@@ -1,4 +1,4 @@
-import type { TaskType } from "../model";
+import type { TaskType } from "../model/index";
 
 export interface AITextResponse {
   text: string;

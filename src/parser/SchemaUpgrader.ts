@@ -1,4 +1,4 @@
-import { duplicatePlanDocument, recomputeDerivedStatuses, type PlanDocument } from "../model";
+import { duplicatePlanDocument, recomputeDerivedStatuses, type PlanDocument } from "../model/index";
 
 export interface MigrationResult {
   upgraded: PlanDocument;

@@ -1,10 +1,10 @@
-import { createTaskNode, type PlanDocument, type TaskNode } from "../model";
+import { createTaskNode, type PlanDocument, type TaskNode } from "../model/index";
 import { createTaskIdGenerator } from "../util";
 import type { AIService } from "../ai/AIService";
 import { buildTaskGenerationPrompt } from "../ai/PromptBuilder";
 import { parseTaskGenerationResponse } from "../ai/ResponseParser";
 import type { GeneratedTaskDraft } from "../ai/types";
-import type { ResearchIndexEntry, WorkspaceScan } from "../model";
+import type { ResearchIndexEntry, WorkspaceScan } from "../model/index";
 
 export interface TaskGeneratorSettings {
   confidenceThreshold: number;

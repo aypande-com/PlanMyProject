@@ -1,5 +1,5 @@
-import { type PlanDocument, listLeafTasks, isTaskBlocked } from "../model";
-import type { TaskNode } from "../model";
+import { type PlanDocument, listLeafTasks, isTaskBlocked } from "../model/index";
+import type { TaskNode } from "../model/index";
 
 export interface QueueBuildOptions {
   researchGate: boolean;

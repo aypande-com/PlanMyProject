@@ -1,4 +1,4 @@
-import type { FeatureSummary, ModuleInfo, ProjectGoal } from "../model";
+import type { FeatureSummary, ModuleInfo, ProjectGoal } from "../model/index";
 
 export function inferFeatures(modules: ModuleInfo[]): FeatureSummary[] {
   const features: FeatureSummary[] = [];
