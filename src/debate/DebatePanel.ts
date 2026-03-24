@@ -92,7 +92,7 @@ function renderDebateHtml(task: TaskNode, workspaceSummary: string): string {
   <div class="rationale"><strong>Rationale:</strong> ${escapedRationale}</div>
   <div class="summary">${escapedSummary}</div>
   <div id="log"></div>
-  <textarea id="message" placeholder="Challenge, refine, or clarify this task..."></textarea>
+  <textarea id="message" placeholder="Challenge, refine, or clarify this task with PlanBot..."></textarea>
   <div class="actions">
     <button id="send">Send</button>
     <button data-action="accept" class="secondary">Accept</button>
@@ -112,7 +112,8 @@ function renderDebateHtml(task: TaskNode, workspaceSummary: string): string {
       const item = document.createElement('div');
       item.className = 'entry';
       const suffix = metadata ? ' ' + metadata : '';
-      item.textContent = '[' + role + ']' + suffix + ' ' + content;
+      const roleLabel = role === 'ai' ? 'PlanBot' : role === 'user' ? 'You' : 'System';
+      item.textContent = '[' + roleLabel + ']' + suffix + ' ' + content;
       log.appendChild(item);
       log.scrollTop = log.scrollHeight;
     }

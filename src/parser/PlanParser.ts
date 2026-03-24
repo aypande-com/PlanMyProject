@@ -3,9 +3,11 @@ import {
   createEmptyPlanDocument,
   createTaskNode,
   duplicatePlanDocument,
+  getTaskBlockReason,
   recomputeDerivedStatuses,
   type PlanDocument,
   type ProjectGoal,
+  type TaskBlockReason,
   type TaskNode,
   type TaskType,
   TASK_TYPE_ICONS,
@@ -21,6 +23,7 @@ const QUEUE_HEADING_RE = /^##\s+Execution Queue\b/i;
 const TASK_LINE_RE = /^(\s*)- \[( |\/|x|X)\] \[([A-Za-z0-9_-]+)\]\s+(?:[🔍⚙️⚖️🏁]\s*)*(.+?)\s*$/;
 const GOAL_LINE_RE = /^\s*-\s+\[(G\d+)\]\s+(.+?)\s*$/;
 const GOAL_HEADER_COMMENT_RE = /^<!--\s*pmp:goal:id=([^;]+);statement=(.+?)(?:;scanned=(.+?))?\s*-->$/;
+const LEADING_TASK_MARKER_RE = /^(?:(?:✅|☑\uFE0F?|✔\uFE0F?|✓|❌|✗|☒|☐|⏳|⌛|⭕|◯|○|🔍|⚙\uFE0F?|⚖\uFE0F?|🏁)\s*)+/u;
 
 export interface ParseResult {
   plan: PlanDocument;
@@ -119,13 +122,13 @@ export function serializePlanMarkdown(plan: PlanDocument, options?: Partial<Seri
 
   const queue = buildExecutionQueue(nextPlan, { researchGate: resolved.researchGate });
 
-  lines.push("### ⚠️ Blocked (Research incomplete)");
+  lines.push("### ⚠️ Blocked (Dependencies, Research, Debate)");
   if (queue.blocked.length === 0) {
     lines.push("(none)");
   } else {
     queue.blocked.forEach((task, index) => {
-      const deps = task.dependsOn.length > 0 ? ` — blocked by [${task.dependsOn.join(", ")}]` : "";
-      lines.push(`${index + 1}. [${task.id}] ${TASK_TYPE_ICONS[task.type]} ${task.title}${deps}`);
+      const reason = getTaskBlockReason(nextPlan, task.id, resolved.researchGate);
+      lines.push(`${index + 1}. [${task.id}] ${TASK_TYPE_ICONS[task.type]} ${task.title}${formatBlockedQueueSuffix(task, reason)}`);
     });
   }
 
@@ -143,7 +146,7 @@ export function serializePlanMarkdown(plan: PlanDocument, options?: Partial<Seri
   lines.push("");
   lines.push("### ⚙️ Ready to Implement");
   if (queue.implementationReady.length === 0) {
-    lines.push("(none yet — complete research tasks above)");
+    lines.push("(none yet — complete research tasks and resolve open debate threads)");
   } else {
     queue.implementationReady.forEach((task, index) => {
       lines.push(`${index + 1}. [${task.id}] ${TASK_TYPE_ICONS[task.type]} ${task.title}`);
@@ -452,7 +455,7 @@ function normalizeNullableNumber(raw: string | undefined): number | null {
 }
 
 function parseDebateLine(line: string): TaskNode["debateLog"][number] | undefined {
-  const match = /^\[(.+?)\](?:\[(.+?)\])?\[(user|ai|system)\]\s+(.+)$/.exec(line);
+  const match = /^\[(.+?)\](?:\[(.+?)\])?\[(user|ai|system)\](?:\[action:(split|rewrite|dismiss|accept|defer)\])?\s+(.+)$/.exec(line);
   if (!match) {
     return undefined;
   }
@@ -461,7 +464,8 @@ function parseDebateLine(line: string): TaskNode["debateLog"][number] | undefine
     timestamp: match[1],
     author: match[2],
     role: match[3] as "user" | "ai" | "system",
-    content: match[4]
+    action: match[4] ? (match[4] as NonNullable<TaskNode["debateLog"][number]["action"]>) : undefined,
+    content: match[5]
   };
 }
 
@@ -486,7 +490,8 @@ function renderTask(lines: string[], plan: PlanDocument, taskId: string, depth: 
     lines.push(`${indent}  <!-- pmp:debate:${task.id}`);
     for (const entry of task.debateLog) {
       const author = entry.author ? `[${entry.author}]` : "";
-      lines.push(`${indent}  [${entry.timestamp}]${author}[${entry.role}] ${entry.content}`);
+      const action = entry.action ? `[action:${entry.action}]` : "";
+      lines.push(`${indent}  [${entry.timestamp}]${author}[${entry.role}]${action} ${entry.content}`);
     }
     lines.push(`${indent}  -->`);
   }
@@ -499,7 +504,7 @@ function renderTask(lines: string[], plan: PlanDocument, taskId: string, depth: 
 }
 
 function inferTaskType(title: string): TaskType {
-  const lowered = title.toLowerCase();
+  const lowered = title.replace(LEADING_TASK_MARKER_RE, "").trim().toLowerCase();
   if (lowered.startsWith("research:") || lowered.startsWith("investigate")) {
     return "research";
   }
@@ -514,6 +519,22 @@ function inferTaskType(title: string): TaskType {
 
 function isTaskType(value: string): value is TaskType {
   return value === "research" || value === "implementation" || value === "decision" || value === "milestone";
+}
+
+function formatBlockedQueueSuffix(task: TaskNode, reason: TaskBlockReason | undefined): string {
+  if (reason === "dependency") {
+    if (task.dependsOn.length === 0) {
+      return " — blocked by unresolved dependency";
+    }
+    return ` — blocked by [${task.dependsOn.join(", ")}]`;
+  }
+  if (reason === "research-gate") {
+    return " — blocked by unresolved sibling research/decision";
+  }
+  if (reason === "debate-thread") {
+    return " — blocked until debate thread is resolved";
+  }
+  return "";
 }
 
 function escapeInlineValue(value: string): string {

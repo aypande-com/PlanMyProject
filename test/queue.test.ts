@@ -43,3 +43,35 @@ test("buildExecutionQueue allows implementation when dependencies are done", () 
   assert.equal(queue.implementationReady.length, 1);
   assert.equal(queue.implementationReady[0].id, "T0003");
 });
+
+test("buildExecutionQueue blocks implementation while debate thread is unresolved", () => {
+  const plan = createEmptyPlanDocument();
+
+  const root = createTaskNode({ id: "T0001", title: "Auth", type: "milestone" });
+  const implementation = createTaskNode({ id: "T0003", title: "Implement middleware", type: "implementation", parentId: "T0001" });
+  implementation.debateLog.push({
+    timestamp: "2026-03-24T10:00:00.000Z",
+    role: "user",
+    content: "We should move this behind a feature flag first."
+  });
+
+  addTask(plan, root);
+  addTask(plan, implementation);
+
+  const blockedQueue = buildExecutionQueue(plan, { researchGate: true });
+  assert.equal(blockedQueue.blocked.length, 1);
+  assert.equal(blockedQueue.blocked[0].id, "T0003");
+  assert.equal(blockedQueue.implementationReady.length, 0);
+
+  implementation.debateLog.push({
+    timestamp: "2026-03-24T10:01:00.000Z",
+    role: "system",
+    action: "accept",
+    content: "Task accepted"
+  });
+
+  const resolvedQueue = buildExecutionQueue(plan, { researchGate: true });
+  assert.equal(resolvedQueue.blocked.length, 0);
+  assert.equal(resolvedQueue.implementationReady.length, 1);
+  assert.equal(resolvedQueue.implementationReady[0].id, "T0003");
+});

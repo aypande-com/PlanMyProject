@@ -445,20 +445,21 @@ The plan file remains a Markdown file for human readability. v2 extends the comm
 
 ### 8.4 Execution Queue Format (v2)
 
-The queue includes task type icons and blocks implementation tasks whose research dependencies are incomplete:
+The queue includes task type icons and blocks implementation tasks when dependencies, research/decision gates, or unresolved debate threads prevent execution:
 
 ```markdown
 ## Execution Queue (Auto-Generated, Leaf Tasks Only)
 
-### ⚠️ Blocked (Research incomplete)
+### ⚠️ Blocked (Dependencies, Research, Debate)
 1. [T0005] ⚙️ Implement: JWT generation utility — blocked by [T0003]
+2. [T0008] ⚙️ Implement: Session revocation endpoint — blocked until debate thread is resolved
 
 ### 🔍 Research Tasks (act first)
 1. [T0003] 🔍 Research: Evaluate PDF generation libraries
 2. [T0004] ⚖️ Decision: Choose auth token storage strategy
 
 ### ⚙️ Ready to Implement
-(none yet — complete research tasks above)
+(none yet — complete research tasks and resolve open debate threads)
 ```
 
 ---
@@ -472,7 +473,7 @@ The tree view retains its v1 structure but adds:
 - **Task type icon** prefixed to each task label
 - **Confidence indicator**: colored dot (green/yellow/red) on AI-generated tasks
 - **Origin badge**: small `AI` / `ME` / `⬛` label
-- **Blocked indicator**: 🔒 on tasks whose `dependsOn` tasks are incomplete
+- **Blocked indicator**: 🔒 on tasks blocked by unresolved dependencies, research/decision gate, or unresolved debate thread
 - **Workspace Snapshot node**: collapsible, at top of tree, showing scan summary
 
 Tree item context menu additions:
@@ -502,7 +503,7 @@ A WebView panel that opens to the side of the editor when `Debate Task` is trigg
 ├─────────────────────────────────────────┤
 │  DEBATE                                 │
 │  [User]: Is this really necessary?...  │
-│  [AI]: Yes, because...                 │
+│  [PlanBot]: Yes, because...            │
 │  [User input box]        [Send]        │
 ├─────────────────────────────────────────┤
 │  ACTIONS                               │
@@ -515,10 +516,12 @@ A WebView panel that opens to the side of the editor when `Debate Task` is trigg
 | Action | Effect |
 |--------|--------|
 | `Accept` | Task is committed to plan as-is |
-| `Rewrite` | User edits task title inline; AI updates rationale |
-| `Split` | AI proposes breaking task into 2–4 sub-tasks; user approves each |
+| `Rewrite` | User edits task title inline; PlanBot updates rationale |
+| `Split` | PlanBot proposes breaking task into 2–4 sub-tasks; user approves each |
 | `Dismiss` | Task is removed from pending tasks (not added to plan) |
 | `Defer` | Task is added to plan with `[deferred]` tag and low queue priority |
+
+Implementation tasks remain blocked while the most recent user debate suggestion is unresolved.
 
 ### 9.3 Goal Setup Panel (New — WebView or Input Flow)
 
@@ -580,7 +583,7 @@ A persistent status bar item showing:
 | `PlanMyProject: Add Task` | — | Prompts for task type |
 | `PlanMyProject: Add Root Task` | — | Prompts for task type |
 | `PlanMyProject: Drill Down Task` | — | Unchanged |
-| `PlanMyProject: Implement Task (Copilot)` | — | Blocked if research dependencies incomplete |
+| `PlanMyProject: Implement Task` | — | Blocked if dependencies, research gate, or debate thread are unresolved |
 | `PlanMyProject: Delete Task` | — | Unchanged |
 | `PlanMyProject: Rebuild Execution Queue` | — | Now includes blocked/research grouping |
 | `PlanMyProject: Refresh Tree` | — | Unchanged |
@@ -774,19 +777,20 @@ A debate can be started:
 
 ```
 1. Debate Panel opens with task context + workspace context
-2. AI generates an opening analysis:
+2. PlanBot generates an opening analysis:
    "This task involves X. Key open questions are: (1)..., (2)..."
 3. User responds (free text)
-4. AI responds with: analysis, suggested actions (split / rewrite / accept)
+4. PlanBot responds with critical analysis that justifies, challenges, and rationalizes the suggestion, plus suggested actions (split / rewrite / accept / dismiss / defer)
 5. Repeat until user selects a terminal action
 6. Debate log stored in task's `debateLog[]`
+7. Implementation remains blocked for that task until a resolving system action is recorded
 ```
 
 ### 13.3 Split Action
 
 When user selects `Split` during a debate:
 
-1. AI proposes 2–4 replacement tasks (as typed `TaskNode` drafts)
+1. PlanBot proposes 2–4 replacement tasks (as typed `TaskNode` drafts)
 2. User sees each proposed task with rationale and confidence
 3. User can accept all, reject all, or selectively accept
 4. Accepted tasks replace the original in the plan tree
@@ -795,7 +799,7 @@ When user selects `Split` during a debate:
 
 1. Debate Panel enters inline edit mode for task title
 2. User edits title
-3. AI regenerates rationale for the new title
+3. PlanBot regenerates rationale for the new title
 4. User confirms → plan updated
 
 ### 13.5 Debate Log Persistence & Git-Based Collaboration
@@ -809,11 +813,11 @@ There is no hosted backend service. All debate state is stored in the plan file 
   [2026-03-18T10:05:00Z][alice][user] Is this really necessary before implementation?
   [2026-03-18T10:05:03Z][ai] Yes — library choice affects bundle size and font support...
   [2026-03-18T10:06:00Z][alice][user] OK, accept
-  [2026-03-18T10:06:01Z][system] action=accept
+  [2026-03-18T10:06:01Z][system][action:accept] Task accepted
   -->
 ```
 
-**Author attribution**: Each user-role entry includes the git user name from `git config user.name` (falls back to OS username). AI entries have no author prefix. This allows reviewers to see who said what across a shared plan.
+**Author attribution**: Each user-role entry includes the git user name from `git config user.name` (falls back to OS username). PlanBot entries use the `ai` role with no author prefix. This allows reviewers to see who said what across a shared plan.
 
 **Cross-developer flow**:
 1. Developer A debates a task, accepts a split → entries written to plan file
@@ -834,12 +838,12 @@ There is no hosted backend service. All debate state is stored in the plan file 
 
 ### 14.1 Execution Queue Ordering (v2)
 
-The queue is rebuilt with the following priority:
+The queue is rebuilt into sections in this display order:
 
-1. Research tasks with no blocking dependencies
-2. Decision tasks with no blocking dependencies
-3. Implementation tasks whose research/decision dependencies are `done`
-4. Blocked implementation tasks (shown separately, not numbered)
+1. Blocked tasks (dependency, research gate, or unresolved debate thread)
+2. Research and decision tasks with no blocking dependencies
+3. Ready implementation tasks
+4. Milestones
 
 ### 14.2 Research Task Completion & Indexing
 
@@ -863,6 +867,8 @@ For `implementation` type tasks, the AI prompt is extended with:
 - The conclusions from all resolved research/decision parents
 - The linked files from workspace scan
 - The current content of those linked files (if within size limit)
+
+`Implement Task` is rejected before prompt construction when block reasons exist (dependencies, research gate, or unresolved debate thread).
 
 Response format is identical to v1 (`summary`, `taskCompleted`, `changes`, `tests`, `risks`) but adds:
 

@@ -8,6 +8,7 @@ PlanMyProject turns project planning into an implementation-ready workflow:
 
 - Keep a single plan file in workspace root (`planmyproject.md` or `projectplan.md`)
 - Expand any task one level at a time with Copilot (`Alt+P`)
+- Debate task scope with `PlanBot` before implementation
 - Track hierarchy in a sidebar tree and an auto-generated execution queue
 - Implement a selected task through structured Copilot JSON file writes
 
@@ -23,7 +24,7 @@ PlanMyProject turns project planning into an implementation-ready workflow:
 2. Add a root objective with `PlanMyProject: Add Root Task`
 3. Place cursor on that task and run `PlanMyProject: Plan Task (One Level)` (or press `Alt+P`)
 4. Repeat planning on child tasks as needed
-5. Run `PlanMyProject: Implement Task (Copilot)` on a leaf task to apply code changes
+5. Run `PlanMyProject: Implement Task` on a leaf task to apply code changes
 
 ## Features (Implemented) with Examples
 
@@ -221,6 +222,14 @@ Implement suggests change to package.json + .vscode/settings.json
 Result: extra "Apply Sensitive Changes" confirmation appears before write
 ```
 
+### 13) Debate with PlanBot and implementation gate
+
+Behavior:
+- Debate panel assistant is shown as `PlanBot`
+- Debate responses are guided to justify, challenge, and rationalize user suggestions
+- Implementation tasks are blocked while debate threads are unresolved
+- Debate logs persist explicit action metadata (`[action:accept|rewrite|split|dismiss|defer]`)
+
 ## Command Reference
 
 - `PlanMyProject: Open Plan`
@@ -229,7 +238,7 @@ Result: extra "Apply Sensitive Changes" confirmation appears before write
 - `PlanMyProject: Add Root Task`
 - `PlanMyProject: Load Requirements File`
 - `PlanMyProject: Drill Down Task`
-- `PlanMyProject: Implement Task (Copilot)`
+- `PlanMyProject: Implement Task`
 - `PlanMyProject: Delete Task`
 - `PlanMyProject: Rebuild Execution Queue`
 - `PlanMyProject: Refresh Tree`

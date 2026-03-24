@@ -4,13 +4,14 @@ import {
   addTask,
   createTaskNode,
   deleteTask,
+  getTaskBlockReason,
   isResearchLikeTask,
-  isTaskBlocked,
   markTaskStatus,
   recomputeDerivedStatuses,
   type FileSendPolicy,
   type PlanDocument,
   type ProjectGoal,
+  type TaskBlockReason,
   type TaskNode,
   type TaskType,
   type WorkspaceScan
@@ -410,8 +411,9 @@ export class PlanController implements vscode.Disposable {
     }
 
     const researchGate = this.getConfiguration().get<boolean>("researchGate", true);
-    if (isTaskBlocked(this.plan, task.id, researchGate)) {
-      void vscode.window.showWarningMessage(`Task ${task.id} is blocked by unresolved research or dependencies.`);
+    const blockReason = getTaskBlockReason(this.plan, task.id, researchGate);
+    if (blockReason) {
+      void vscode.window.showWarningMessage(describeTaskBlockMessage(task.id, blockReason));
       return;
     }
 
@@ -1515,6 +1517,16 @@ function taskTypeLabel(type: TaskType): string {
     return "Milestone";
   }
   return "Implementation";
+}
+
+function describeTaskBlockMessage(taskId: string, reason: TaskBlockReason): string {
+  if (reason === "dependency") {
+    return `Task ${taskId} is blocked by unresolved dependencies.`;
+  }
+  if (reason === "research-gate") {
+    return `Task ${taskId} is blocked by unresolved sibling research or decision tasks.`;
+  }
+  return `Task ${taskId} is blocked until the debate thread is resolved.`;
 }
 
 function normalizeTaskTitleKey(value: string): string {

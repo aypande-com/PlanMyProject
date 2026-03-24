@@ -1,5 +1,6 @@
 import {
   type FileSendPolicy,
+  hasUnresolvedDebateThread,
   normalizeTaskTitle,
   type TaskNode,
   type TaskStatus,
@@ -14,6 +15,8 @@ export interface PlanDocument {
   rootTaskIds: string[];
   tasks: Record<string, TaskNode>;
 }
+
+export type TaskBlockReason = "dependency" | "research-gate" | "debate-thread";
 
 export function createEmptyPlanDocument(): PlanDocument {
   return {
@@ -167,17 +170,21 @@ export function markTaskStatus(plan: PlanDocument, taskId: string, status: TaskS
   recomputeDerivedStatuses(plan);
 }
 
-export function isTaskBlocked(plan: PlanDocument, taskId: string, researchGate: boolean): boolean {
+export function getTaskBlockReason(plan: PlanDocument, taskId: string, researchGate: boolean): TaskBlockReason | undefined {
   const task = plan.tasks[taskId];
   if (!task) {
-    return false;
+    return undefined;
   }
 
   for (const depId of task.dependsOn) {
     const dep = plan.tasks[depId];
     if (!dep || dep.status !== "done") {
-      return true;
+      return "dependency";
     }
+  }
+
+  if (task.type === "implementation" && hasUnresolvedDebateThread(task)) {
+    return "debate-thread";
   }
 
   if (researchGate && task.type === "implementation") {
@@ -189,13 +196,17 @@ export function isTaskBlocked(plan: PlanDocument, taskId: string, researchGate: 
         }
         const sibling = plan.tasks[siblingId];
         if (sibling && isResearchLikeTask(sibling.type) && sibling.status !== "done") {
-          return true;
+          return "research-gate";
         }
       }
     }
   }
 
-  return false;
+  return undefined;
+}
+
+export function isTaskBlocked(plan: PlanDocument, taskId: string, researchGate: boolean): boolean {
+  return getTaskBlockReason(plan, taskId, researchGate) !== undefined;
 }
 
 export function duplicatePlanDocument(plan: PlanDocument): PlanDocument {

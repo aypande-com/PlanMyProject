@@ -1,6 +1,12 @@
 import * as vscode from "vscode";
-import { TASK_TYPE_ICONS, type PlanDocument, type TaskNode, type WorkspaceScan } from "../model/index";
-import { isTaskBlocked } from "../model/index";
+import {
+  TASK_TYPE_ICONS,
+  getTaskBlockReason,
+  type PlanDocument,
+  type TaskBlockReason,
+  type TaskNode,
+  type WorkspaceScan
+} from "../model/index";
 
 interface RequestStatus {
   taskId: string;
@@ -33,7 +39,8 @@ class TaskTreeItem extends vscode.TreeItem {
     requestStatus: RequestStatus | undefined,
     researchGate: boolean
   ) {
-    const blocked = isTaskBlocked(plan, task.id, researchGate);
+    const blockReason = getTaskBlockReason(plan, task.id, researchGate);
+    const blocked = blockReason !== undefined;
 
     super(
       `${blocked ? "🔒 " : ""}${TASK_TYPE_ICONS[task.type]} ${task.title}`,
@@ -52,7 +59,7 @@ class TaskTreeItem extends vscode.TreeItem {
       `Goal: ${task.goalRef ?? "none"}`,
       `Origin: ${task.origin}`,
       `Confidence: ${confidence}`,
-      blocked ? "Blocked by dependencies or unresolved research tasks" : "Ready based on current dependencies"
+      blocked ? describeBlockReason(blockReason) : "Ready based on current dependencies"
     ].join("\n");
 
     this.contextValue = blocked
@@ -181,6 +188,19 @@ function iconForTask(task: TaskNode, requestStatus: RequestStatus | undefined): 
   }
 
   return new vscode.ThemeIcon("circle-large-outline");
+}
+
+function describeBlockReason(reason: TaskBlockReason | undefined): string {
+  if (reason === "dependency") {
+    return "Blocked by unresolved dependencies.";
+  }
+  if (reason === "research-gate") {
+    return "Blocked by unresolved sibling research/decision tasks.";
+  }
+  if (reason === "debate-thread") {
+    return "Blocked until the debate thread is resolved.";
+  }
+  return "Blocked.";
 }
 
 function formatOriginBadge(task: TaskNode): string {

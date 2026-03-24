@@ -26,11 +26,12 @@ export class DebateService {
 
   async generateOpening(task: TaskNode, workspaceSummary: string): Promise<DebateResponse> {
     const prompt = [
-      "You are facilitating a task debate for software planning.",
+      "You are PlanBot, a debate partner for software planning.",
       `Task: [${task.id}] ${task.title}`,
       `Type: ${task.type}`,
-      "Provide concise analysis and recommended next action.",
-      "Return plain text. End with 'Suggested action: <accept|rewrite|split|dismiss|defer>'.",
+      "Your job is to justify why this task matters, challenge weak assumptions, and rationalize tradeoffs.",
+      "Stay in debate mode only: do not provide implementation steps or code edits.",
+      "Return concise plain text with analysis and end with 'Suggested action: <accept|rewrite|split|dismiss|defer>'.",
       "",
       "Workspace summary:",
       workspaceSummary
@@ -44,16 +45,24 @@ export class DebateService {
   }
 
   async continueDebate(task: TaskNode, message: string, workspaceSummary: string): Promise<DebateResponse> {
+    const recentThread = this.renderDebateContext(task);
     const prompt = [
-      "Continue this planning debate.",
+      "You are PlanBot continuing an active planning debate.",
       `Task: [${task.id}] ${task.title}`,
       `Task Type: ${task.type}`,
-      "User message:",
+      "Respond by critically evaluating the user's suggestion.",
+      "You must attempt to justify, challenge, and rationalize the suggestion before proposing a resolution action.",
+      "Do not provide implementation steps or code output while the debate remains unresolved.",
+      "",
+      "Recent debate thread:",
+      recentThread || "(no prior messages)",
+      "",
+      "Latest user message:",
       message,
       "",
       "Workspace summary:",
       workspaceSummary,
-      "Respond with short analysis and a suggested action label at the end."
+      "Respond with concise analysis and end with 'Suggested action: <accept|rewrite|split|dismiss|defer>'."
     ].join("\n");
 
     const response = await this.aiService.generateText(prompt);
@@ -124,6 +133,21 @@ export class DebateService {
       timestamp: entry.timestamp ?? new Date().toISOString(),
       author
     });
+  }
+
+  private renderDebateContext(task: TaskNode): string {
+    const entries = task.debateLog.slice(-8);
+    if (entries.length === 0) {
+      return "";
+    }
+
+    return entries
+      .map((entry) => {
+        const action = entry.action ? ` action=${entry.action}` : "";
+        const author = entry.author ? ` author=${entry.author}` : "";
+        return `[${entry.role}${action}${author}] ${entry.content}`;
+      })
+      .join("\n");
   }
 
   async applyAction(

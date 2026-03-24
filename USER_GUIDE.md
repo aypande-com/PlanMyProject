@@ -59,7 +59,7 @@ When using AI tools like Copilot or Claude for development, you face three key c
 - 📊 **Scans your workspace** to understand what code already exists
 - 🔍 **Surfaces research needs** before implementation tasks (unknowns first)
 - 🎯 **Anchors all tasks to your goal** so nothing is built by accident
-- 💬 **Enables debate** — you can challenge any task, split it, rewrite it, or dismiss it
+- 💬 **Enables debate with PlanBot** — you can challenge any task, split it, rewrite it, or dismiss it
 
 ### Key Terms
 
@@ -70,10 +70,10 @@ When using AI tools like Copilot or Claude for development, you face three key c
 | **Research Task** 🔍 | A task where you need to investigate or decide before coding (e.g., "Evaluate PDF libraries"). Must be done before related implementation tasks. |
 | **Implementation Task** ⚙️ | A concrete coding task (e.g., "Build login endpoint"). Should only appear after research tasks are resolved. |
 | **Decision Task** ⚖️ | An architectural or design choice that must be recorded (e.g., "Choose auth strategy"). Unblocks dependent tasks once resolved. |
-| **Execution Queue** | Auto-generated list of leaf (actionable) tasks, ordered by: Research → Decision → Ready to Implement → Blocked tasks. |
+| **Execution Queue** | Auto-generated list of leaf (actionable) tasks grouped by blockers and readiness: Blocked → Research/Decision → Ready to Implement → Milestones. |
 | **Confidence Score** | AI's confidence (0–100%) that a generated task is correct. High confidence tasks are auto-accepted; low confidence show a review prompt. |
 | **Research Index** | A searchable database of past research conclusions (e.g., "We chose pdfkit because..."). Automatically injected into future AI prompts so the AI learns from your decisions. |
-| **Debate** | A chat-like interface where you can challenge a task, ask AI to split it, rewrite it, or dismiss it. Debate history is saved in the plan file. |
+| **Debate** | A chat-like interface where you can challenge a task and ask PlanBot to split, rewrite, defer, accept, or dismiss it. Debate history is saved in the plan file. |
 | **Workspace Snapshot** | A summary of what the scanner found: which modules exist, are partially built, are missing tests, etc. Shown in the Debate Panel. |
 
 ---
@@ -101,16 +101,16 @@ When using AI tools like Copilot or Claude for development, you face three key c
    - A Debate Panel opens showing generated tasks
    - For each task:
      - **Accept** — add it to the plan as-is
-     - **Debate** — ask AI questions (e.g., "Is this really needed?", "Should we split this?")
-     - **Rewrite** — edit the task title and let AI regenerate the rationale
-     - **Split** — ask AI to break it into 2–4 smaller tasks
+     - **Debate** — ask PlanBot questions (e.g., "Is this really needed?", "Should we split this?")
+     - **Rewrite** — edit the task title and let PlanBot regenerate the rationale
+     - **Split** — ask PlanBot to break it into 2–4 smaller tasks
      - **Dismiss** — skip this task
 
 5. **Review execution queue**. The "Execution Queue" section at the bottom of your plan file shows actionable tasks in priority order:
    - 🔍 **Research Tasks** (do these first to unblock implementation)
    - ⚖️ **Decision Tasks** (resolve these to unblock dependents)
    - ⚙️ **Ready to Implement** (no blockers, ready to start)
-   - 🔒 **Blocked Tasks** (waiting on research/decisions)
+   - 🔒 **Blocked Tasks** (waiting on dependencies, unresolved research/decisions, or unresolved debate threads)
 
 ### Workflow 2: Scan Existing Code & Generate a Plan Around It
 
@@ -168,7 +168,7 @@ When using AI tools like Copilot or Claude for development, you face three key c
 #### Steps
 
 1. **Select an implementation task** (icon ⚙️) from the Execution Queue. Example: `"Build login endpoint"`.
-   - **Important:** Research dependencies must be marked done first. If blocked, the task will show a 🔒 icon.
+   - **Important:** Dependencies and research/decision blockers must be done first, and the debate thread must be resolved. If blocked, the task will show a 🔒 icon.
 
 2. **Run:** `PlanMyProject: Implement Task` (or click `Implement` in CodeLens on the plan file line).
 
@@ -201,7 +201,7 @@ When using AI tools like Copilot or Claude for development, you face three key c
 
 ---
 
-### Workflow 5: Debate a Task (Challenge, Split, Rewrite)
+### Workflow 5: Debate a Task with PlanBot (Challenge, Split, Rewrite)
 
 **Goal:** You don't like a generated task. Refine it through debate before adding to the plan.
 
@@ -219,7 +219,7 @@ When using AI tools like Copilot or Claude for development, you face three key c
 
 3. **Chat with AI** (bottom section of panel):
    - Type a question: *"Is this really a separate task or part of 'Build login endpoint'?"*
-   - AI responds with analysis
+   - PlanBot responds by justifying, challenging, and rationalizing your suggestion
    - Repeat until you're ready to decide
 
 4. **Choose an action**:
@@ -227,21 +227,23 @@ When using AI tools like Copilot or Claude for development, you face three key c
    | Action | When to Use | Result |
    |--------|-----------|--------|
    | **Accept** | Task is good as-is | Task added to plan immediately |
-   | **Rewrite** | Task title should be different | Edit title inline; AI regenerates rationale; click save |
-   | **Split** | Task is too big | AI proposes 2-4 sub-tasks; you approve each one |
+   | **Rewrite** | Task title should be different | Edit title inline; PlanBot regenerates rationale; click save |
+   | **Split** | Task is too big | PlanBot proposes 2-4 sub-tasks; you approve each one |
    | **Dismiss** | Not needed | Task is removed (not added to plan) |
    | **Defer** | Useful but not urgent | Task added with `[deferred]` tag; low queue priority |
 
-5. **Debate gets saved**. All messages in the debate are stored in your plan file under the task:
+5. **Debate gets saved**. All messages and resolution actions are stored in your plan file under the task:
    ```markdown
    <!-- pmp:debate:T0003
    [2026-03-19T10:05:00Z][alice][user] Is this really necessary?
    [2026-03-19T10:05:03Z][ai] Yes, because...
    [2026-03-19T10:06:00Z][alice][user] OK, split it
+   [2026-03-19T10:06:01Z][system][action:split] Task T0003 replaced with 2 split task(s).
    -->
    ```
    - If your teammate pulls the latest plan, they'll see this entire conversation
    - They can continue the debate or see what decision was made
+   - Implementation stays blocked while a newer user suggestion is still unresolved
 
 ---
 
@@ -274,7 +276,7 @@ Plan
 | 🟢 (dot) | Green = high confidence AI task |
 | 🟡 (dot) | Yellow = medium confidence (review if unsure) |
 | 🔴 (dot) | Red = low confidence (review before committing) |
-| 🔒 | Locked — waiting on dependencies to complete |
+| 🔒 | Locked — waiting on dependencies, unresolved research/decision tasks, or unresolved debate thread |
 | `[x]` | Done |
 | `[/]` | In Progress |
 | `[ ]` | To Do |
@@ -337,7 +339,7 @@ Dependencies: jspdf@2.4.0, pdfkit@0.13.0
 ```
 
 **Rationale Section:**
-AI's explanation for why this task exists:
+PlanBot's explanation for why this task exists:
 > "PDF generation is a core output of invoicing. Library choice affects bundle size and font support."
 
 **Debate Section:**
@@ -345,7 +347,7 @@ A chat-like conversation:
 ```
 [You]: Is pdfkit really necessary if we can use jsPDF?
 
-[AI]: Both are viable, but pdfkit has better font support and 
+[PlanBot]: Both are viable, but pdfkit has better font support and 
 smaller bundle size for the use case...
 
 [You]: OK, let's go with pdfkit
@@ -353,7 +355,7 @@ smaller bundle size for the use case...
 
 **Action Buttons:**
 - `[Accept]` — add task to plan as-is
-- `[Rewrite]` — edit task title; AI updates rationale
+- `[Rewrite]` — edit task title; PlanBot updates rationale
 - `[Split]` — propose 2-4 smaller tasks
 - `[Dismiss]` — don't add this task
 - `[Defer]` — add with low priority
@@ -365,8 +367,9 @@ At the bottom of your `planmyproject.md` file:
 ```markdown
 ## Execution Queue (Auto-Generated, Leaf Tasks Only)
 
-### ⚠️ Blocked (Research incomplete)
+### ⚠️ Blocked (Dependencies, Research, Debate)
 1. [T0005] ⚙️ Implement: Token refresh endpoint — blocked by [T0003]
+2. [T0009] ⚙️ Implement: Session revocation endpoint — blocked until debate thread is resolved
 
 ### 🔍 Research Tasks (act first)
 1. [T0003] 🔍 Research: Evaluate JWT vs session auth
@@ -380,7 +383,7 @@ At the bottom of your `planmyproject.md` file:
 (no pending milestones)
 ```
 
-**Red flag:** If implementation tasks are blocked, complete the research tasks above them first.
+**Red flag:** If implementation tasks are blocked, complete dependencies/research first and resolve any open debate thread.
 
 ### Goal Setup Panel
 
@@ -476,7 +479,7 @@ When AI generates a task with confidence < 70%, take time to debate it:
 [You]: This seems like two tasks: "design DB schema" and "implement migrations". 
        Should we split?
 
-[AI]: Good catch. Yes, they can be parallelized. Let me split this.
+[PlanBot]: Good catch. Yes, they can be parallelized. Let me split this.
 ```
 
 ### 4. Record Research Conclusions Thoroughly
@@ -594,7 +597,12 @@ The scan is **local only** — nothing is sent to Copilot except a summary.
 
 ### Q: Why are some tasks "blocked"?
 
-**A:** A task is blocked if it has a `dependsOn` relationship to an incomplete task. Example:
+**A:** A task is blocked when any of these are true:
+- It has a `dependsOn` relationship to an incomplete task
+- A sibling research/decision task is incomplete (when research gate is enabled)
+- The task has an unresolved debate thread
+
+Example:
 
 ```markdown
 - [x] [T0001] 🔍 Research: Choose auth strategy    ← DONE
@@ -627,6 +635,7 @@ Your API key is stored securely in VS Code's Secret Storage — it's never logge
   [2026-03-19T10:05:00Z][alice][user] Is pdfkit necessary?
   [2026-03-19T10:05:03Z][ai] Yes, because of font support...
   [2026-03-19T10:06:00Z][alice][user] OK, accept
+  [2026-03-19T10:06:01Z][system][action:accept] Task accepted
   -->
 ```
 
@@ -738,5 +747,5 @@ Happy planning! 🚀
 
 ---
 
-*Last Updated: 2026-03-20*  
+*Last Updated: 2026-03-24*  
 *Version: PlanMyProject v2.0.0*

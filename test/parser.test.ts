@@ -110,3 +110,64 @@ test("parsePlanMarkdown normalizes repeated leading marker icons in task titles"
   assert.match(serialized, /- \[ \] \[T0008\] ⚙️ Research local-first persistence options for selected stocks and cached quotes/);
   assert.doesNotMatch(serialized, /⚙️\s+⚙️/);
 });
+
+test("parsePlanMarkdown strips leading status icons from task titles", () => {
+  const markdown = [
+    "# Project Plan",
+    "",
+    "<!-- pmp:schema=v2 -->",
+    "",
+    "## Plan Tree",
+    "",
+    "- [x] [T0001] ✅ ✅ Research: choose local cache strategy",
+    "",
+    "## Execution Queue (Auto-Generated, Leaf Tasks Only)",
+    "",
+    "### ⚠️ Blocked (Research incomplete)",
+    "(none)",
+    "",
+    "### 🔍 Research Tasks (act first)",
+    "(none)",
+    "",
+    "### ⚙️ Ready to Implement",
+    "(none)"
+  ].join("\n");
+
+  const parsed = parsePlanMarkdown(markdown);
+  const task = parsed.plan.tasks["T0001"];
+  assert.ok(task);
+  assert.equal(task.status, "done");
+  assert.equal(task.type, "research");
+  assert.equal(task.title, "choose local cache strategy");
+
+  const serialized = serializePlanMarkdown(parsed.plan, { researchGate: true, showRationaleInline: true });
+  assert.match(serialized, /- \[x\] \[T0001\] 🔍 choose local cache strategy/);
+  assert.doesNotMatch(serialized, /✅/);
+});
+
+test("debate entries keep action metadata across serialize/parse", () => {
+  const plan = createEmptyPlanDocument();
+  const task = createTaskNode({ id: "T0001", title: "Implement caching", type: "implementation" });
+  task.debateLog.push({
+    timestamp: "2026-03-24T12:00:00.000Z",
+    role: "user",
+    author: "alice",
+    content: "Should we gate this rollout?"
+  });
+  task.debateLog.push({
+    timestamp: "2026-03-24T12:01:00.000Z",
+    role: "system",
+    action: "rewrite",
+    content: "Task rewritten to: Implement caching with rollout flag"
+  });
+  addTask(plan, task);
+
+  const markdown = serializePlanMarkdown(plan, { researchGate: true, showRationaleInline: true });
+  assert.match(markdown, /\[system\]\[action:rewrite\] Task rewritten to: Implement caching with rollout flag/);
+
+  const parsed = parsePlanMarkdown(markdown);
+  const parsedTask = parsed.plan.tasks["T0001"];
+  assert.ok(parsedTask);
+  assert.equal(parsedTask.debateLog.length, 2);
+  assert.equal(parsedTask.debateLog[1].action, "rewrite");
+});

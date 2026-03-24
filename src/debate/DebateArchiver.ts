@@ -71,7 +71,8 @@ function buildArchiveContent(taskId: string, taskTitle: string, entries: DebateE
 
   for (const entry of entries) {
     const author = entry.author ? `[${entry.author}]` : "";
-    lines.push(`[${entry.timestamp}]${author}[${entry.role}] ${entry.content}`);
+    const action = entry.action ? `[action:${entry.action}]` : "";
+    lines.push(`[${entry.timestamp}]${author}[${entry.role}]${action} ${entry.content}`);
   }
 
   lines.push("");
