@@ -90,7 +90,7 @@ When using AI tools like Copilot or Claude for development, you face three key c
 
 2. **Run:** `PlanMyProject: Set Project Goal`
    - Enter your goal statement, success criteria, constraints, out-of-scope items
-   - Click "Save"
+   - Complete the input prompts to store the goal
 
 3. **Select starter root tasks**. Right after saving the goal, PlanMyProject suggests high-level root tasks.
    - Pick the suggestions you want as a starting point
@@ -98,13 +98,9 @@ When using AI tools like Copilot or Claude for development, you face three key c
 
 4. **Plan the task**. Select the task in the tree, then run `PlanMyProject: Plan Task (One Level)` (or press `Alt+P`).
    - The extension scans your workspace, analyzes your goal, and generates child tasks
-   - A Debate Panel opens showing generated tasks
-   - For each task:
-     - **Accept** — add it to the plan as-is
-     - **Debate** — ask PlanBot questions (e.g., "Is this really needed?", "Should we split this?")
-     - **Rewrite** — edit the task title and let PlanBot regenerate the rationale
-     - **Split** — ask PlanBot to break it into 2–4 smaller tasks
-     - **Dismiss** — skip this task
+   - Tasks above the confidence threshold are committed automatically
+   - If low-confidence tasks are generated, you'll choose whether to commit accepted tasks only, include low-confidence tasks, or cancel
+   - Use `PlanMyProject: Debate Task` on any task when you want to challenge/refine it
 
 5. **Review execution queue**. The "Execution Queue" section at the bottom of your plan file shows actionable tasks in priority order:
    - 🔍 **Research Tasks** (do these first to unblock implementation)
@@ -172,45 +168,34 @@ When using AI tools like Copilot or Claude for development, you face three key c
 
 2. **Run:** `PlanMyProject: Implement Task` (or click `Implement` in CodeLens on the plan file line).
 
-3. **Review the prompt**. A panel appears showing:
-   - Your goal statement
-   - Workspace context (e.g., existing Express.js setup, JWT library installed)
-   - Past research conclusions (e.g., "We're using JWT with httpOnly cookies")
-   - Task details and linked files
+3. **Grant consent**. A modal prompt appears before sending context to your configured provider:
+   - **Send to AI** (one-time)
+   - **Allow All** (for the current session)
 
-4. **Grant consent**. The "Send to AI" button appears. Click it to:
-   - Send the prompt to Copilot/Claude/OpenAI (based on your settings)
-   - You can choose "Send Once" or "Allow All" for remaining tasks
+4. **AI returns structured output**. The extension parses JSON with summary, file changes, tests, and risks.
 
-5. **AI generates code**. A response appears with:
-   - **Summary** — what was implemented
-   - **Code changes** — files to create/edit with code diffs
-   - **Tests** — test code (if applicable)
-   - **Risks** — edge cases and considerations
+5. **Safety checks run before write**:
+   - Sensitive target files trigger an extra "Apply" confirmation
+   - Paths must be workspace-relative and safe
 
-6. **Review and apply**. For each file change:
-   - Read the code
-   - Click "Apply" to write to disk, or "Skip" to ignore
-   - Once a file is written, it's auto-validated (no deletions, no sensitive paths like `.env`)
+6. **Changes are written**. Valid changes are applied to disk; there is no per-file Apply/Skip UI in the current flow.
 
-7. **Auto-rescan**. After implementation, the extension:
-   - Re-scans your workspace
-   - Detects the new code
-   - Checks if this task should be marked complete
-   - Updates the Execution Queue
+7. **Plan state updates**. After implementation, the extension:
+   - Marks the task `done` or `in-progress` based on AI response (`taskCompleted`)
+   - Rebuilds the plan state and queue
+   - Optionally re-scans the workspace (`autoRescanOnImplement`)
 
 ---
 
 ### Workflow 5: Debate a Task with PlanBot (Challenge, Split, Rewrite)
 
-**Goal:** You don't like a generated task. Refine it through debate before adding to the plan.
+**Goal:** You want to challenge or refine a task before implementation.
 
 #### Steps
 
-1. **A task appears in the Debate Panel**. This happens when:
-   - You run `PlanMyProject: Plan Task` and AI generates new tasks
-   - You run `PlanMyProject: Debate Task` on an existing task
-   - An AI-generated task has low confidence score (< 50%)
+1. **Open the Debate Panel** for a task:
+   - Run `PlanMyProject: Debate Task` from the task context menu
+   - Or use CodeLens (`Debate`) in the plan file
 
 2. **Read the task**:
    - Title, type (research/implementation/decision), confidence score
@@ -226,10 +211,10 @@ When using AI tools like Copilot or Claude for development, you face three key c
 
    | Action | When to Use | Result |
    |--------|-----------|--------|
-   | **Accept** | Task is good as-is | Task added to plan immediately |
-   | **Rewrite** | Task title should be different | Edit title inline; PlanBot regenerates rationale; click save |
-   | **Split** | Task is too big | PlanBot proposes 2-4 sub-tasks; you approve each one |
-   | **Dismiss** | Not needed | Task is removed (not added to plan) |
+   | **Accept** | Task is good as-is | Keeps task as-is and resolves the current debate thread |
+   | **Rewrite** | Task title should be different | Prompts for a new title and regenerates rationale |
+   | **Split** | Task is too big | Replaces task with split task(s) |
+   | **Dismiss** | Not needed | Task is removed from the plan |
    | **Defer** | Useful but not urgent | Task added with `[deferred]` tag; low queue priority |
 
 5. **Debate gets saved**. All messages and resolution actions are stored in your plan file under the task:
@@ -285,15 +270,18 @@ Plan
 
 Right-click any task to:
 
+- **Add Task** — create a child task under the selected task
 - **Plan** — generate child tasks (one level)
 - **Debate** — open Debate Panel to refine/challenge the task
 - **Implement** — generate code for this task (if implementation type)
-- **Scan** — re-scan files linked to this task
 - **Mark as Research Complete** — record conclusion and index it
+- **Set Task File Send Policy** — override file-send behavior for this task
 - **Show Rationale** — view AI's reasoning for this task
 - **View Linked Files** — open all files associated with this task
+- **View Debate Archive** — open archived debate entries for this task (if present)
 - **Delete** — remove task (with confirmation)
-- **Refresh Tree** — refresh the sidebar display
+
+`Scan Task` is available via CodeLens (`Scan`) and Command Palette.
 
 ### Status Bar (Bottom Right)
 
@@ -302,7 +290,8 @@ Shows:
 - **No goal warning:** `⚠️ No project goal set` — if you haven't set goals yet (clickable → opens Goal Setup)
 - **Spinner during AI requests:** Shows when Copilot/AI is running
 
-Click any status item to refresh the scan.
+When the status bar shows scan state, click it to refresh the scan.  
+When it shows "No project goal set", clicking opens `Set Project Goal`.
 
 ### CodeLens (Inline Actions in Plan File)
 
@@ -321,7 +310,7 @@ When viewing `planmyproject.md`, you'll see inline action links:
 
 ### Debate Panel (WebView)
 
-Opens when you plan a task or click "Debate". Shows:
+Opens when you run `PlanMyProject: Debate Task` (or use the `Debate` CodeLens). Shows:
 
 **Top Section:**
 ```
@@ -385,11 +374,11 @@ At the bottom of your `planmyproject.md` file:
 
 **Red flag:** If implementation tasks are blocked, complete dependencies/research first and resolve any open debate thread.
 
-### Goal Setup Panel
+### Goal Setup Flow
 
 Accessed via: `PlanMyProject: Set Project Goal`
 
-A step-by-step form:
+A step-by-step prompt flow:
 
 1. **Goal Statement** (required)
    ```
@@ -420,7 +409,7 @@ A step-by-step form:
    Advanced AI features
    ```
 
-After filling this out and clicking "Save":
+After completing the prompts:
 - Your goal is written to the plan file header
 - All future task generation references this goal
 - Status bar no longer shows "⚠️ No project goal set"
@@ -429,7 +418,7 @@ After filling this out and clicking "Save":
 
 Run: `PlanMyProject: View Research Index`
 
-Opens a read-only formatted view of `.pmp/research-index.json` showing all recorded research conclusions:
+Opens `.pmp/research-index.json` in the editor so you can review all recorded research conclusions:
 
 ```json
 [
@@ -556,14 +545,14 @@ vendor/
 
 ### Q: What if I already have code? Do I need to start a new plan?
 
-**A:** No. Open your project, set a goal, and run `PlanMyProject: Open Plan`. The extension scans your code and generates tasks only for what's missing. It never suggests tasks for completed modules.
+**A:** No. Open your project, set a goal, and run `PlanMyProject: Open Plan`. The extension scans your code and uses that context while generating tasks. It aims to avoid suggesting tasks for areas already marked complete by scan, but generated output should still be reviewed.
 
 ### Q: How does file sending to AI work?
 
 **A:** By default, the extension does NOT send file contents to Copilot (privacy-first). When you implement a task:
 - Task details and goal are sent
-- File paths are sent (so AI knows "this is Express-based")
-- File contents are **not** sent unless you explicitly enable it in settings
+- Linked file paths/contents are sent only when task/global file-send policy allows it
+- If file sending is disabled (or task policy is `never`), linked file context is not included
 
 To enable file sending:
 - Run: `Preferences: Open Settings (JSON)`
@@ -574,7 +563,7 @@ To enable file sending:
 
 **A:** Yes! The plan file is markdown and human-editable. However:
 - Keep the HTML comment metadata aligned with changes (`<!-- pmp:id=... -->`)
-- If you delete a task, its ID is still usable for new tasks (IDs are never recycled)
+- Task IDs are generated from the highest ID currently present; if the highest task ID is deleted, that numeric slot can be reused later
 - If you manually edit, run `PlanMyProject: Rebuild Execution Queue` to regenerate the queue
 
 ### Q: What happens if two teammates edit the plan file at the same time?
@@ -707,7 +696,7 @@ This ensures that if you override the global setting for one task, it's remember
 **Solution:**  
 This is expected behavior. All debate history is permanent in the plan file. If you don't want old debates to show, archive them:
 - Run `PlanMyProject: View Debate Archive` to see archived entries
-- Debate entries older than 90 days (configurable) automatically move to an archive block
+- Debate entries older than 90 days (configurable) are archived to `.pmp/debate-archive/<taskId>.md`
 
 ### Issue: Workspace keeps re-scanning unnecessarily
 
