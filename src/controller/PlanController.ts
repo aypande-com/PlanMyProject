@@ -1181,13 +1181,18 @@ export class PlanController implements vscode.Disposable {
   }
 
   private warnDebateConflicts(conflictedTaskIds: string[]): void {
-    for (const taskId of conflictedTaskIds) {
-      if (this.warnedDebateConflicts.has(taskId)) {
-        continue;
-      }
-      this.warnedDebateConflicts.add(taskId);
-      void vscode.window.showWarningMessage(`Debate log conflict detected on ${taskId}. Please resolve in the plan file.`);
+    const newIds = conflictedTaskIds.filter((id) => !this.warnedDebateConflicts.has(id));
+    if (newIds.length === 0) {
+      return;
     }
+    for (const id of newIds) {
+      this.warnedDebateConflicts.add(id);
+    }
+    const preview = newIds.slice(0, 5).join(", ");
+    const extra = newIds.length > 5 ? ` (+${newIds.length - 5} more)` : "";
+    void vscode.window.showWarningMessage(
+      `Debate log conflict${newIds.length > 1 ? "s" : ""} detected on: ${preview}${extra}. Please resolve in the plan file.`
+    );
   }
 
   private async confirmWriteToCompleteFiles(paths: string[]): Promise<boolean> {
