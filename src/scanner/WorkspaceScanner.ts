@@ -52,18 +52,26 @@ export class WorkspaceScanner {
     options?.onProgress?.("Extracting signatures...");
     const signaturesByFile = new Map<string, SignatureSummary>();
     if (settings.extractSignatures) {
-      for (const file of sourceFiles) {
-        if (isGeneratedPath(file)) {
-          continue;
+      const filesToScan = sourceFiles.filter((file) => !isGeneratedPath(file));
+      const CONCURRENCY = 10;
+      for (let i = 0; i < filesToScan.length; i += CONCURRENCY) {
+        const batch = filesToScan.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          batch.map(async (file) => {
+            const uri = vscode.Uri.joinPath(root, ...file.split("/"));
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            if (bytes.length > settings.maxFileSizeKb * 1024) {
+              return null;
+            }
+            const content = Buffer.from(bytes).toString("utf8");
+            return { file, signatures: extractSignatures(file, content, { maxPerFile: 200 }) };
+          })
+        );
+        for (const result of results) {
+          if (result) {
+            signaturesByFile.set(result.file, result.signatures);
+          }
         }
-
-        const uri = vscode.Uri.joinPath(root, ...file.split("/"));
-        const bytes = await vscode.workspace.fs.readFile(uri);
-        if (bytes.length > settings.maxFileSizeKb * 1024) {
-          continue;
-        }
-        const content = Buffer.from(bytes).toString("utf8");
-        signaturesByFile.set(file, extractSignatures(file, content, { maxPerFile: 200 }));
       }
     }
 
