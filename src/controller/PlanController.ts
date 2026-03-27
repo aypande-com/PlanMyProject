@@ -162,15 +162,18 @@ export class PlanController implements vscode.Disposable {
         if (this.isSelfWriting) {
           return;
         }
-        if (this.planUri && document.uri.toString() === this.planUri.toString()) {
-          await this.refreshPlanState();
+        // Fast path: planUri is already known — compare directly, no filesystem call.
+        if (this.planUri) {
+          if (document.uri.toString() === this.planUri.toString()) {
+            await this.refreshPlanState();
+          }
           return;
         }
+        // Cold-start fallback: planUri not yet resolved, check filesystem once.
         const planUris = await findPlanUris();
-        if (!planUris.some((uri) => uri.toString() === document.uri.toString())) {
-          return;
+        if (planUris.some((uri) => uri.toString() === document.uri.toString())) {
+          await this.refreshPlanState();
         }
-        await this.refreshPlanState();
       })
     );
   }
