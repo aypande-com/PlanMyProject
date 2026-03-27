@@ -942,25 +942,28 @@ export class PlanController implements vscode.Disposable {
     const parsed = parsePlanMarkdown(serialized);
     this.plan = parsed.plan;
 
-    this.maybeArchiveDebateEntries();
+    await this.maybeArchiveDebateEntries();
     this.render();
   }
 
-  private maybeArchiveDebateEntries(): void {
+  private async maybeArchiveDebateEntries(): Promise<void> {
     if (!this.plan) {
       return;
     }
 
     const archiveAfterDays = this.getConfiguration().get<number>("debate.archiveAfterDays", 90);
     const archiver = new DebateArchiver(archiveAfterDays);
-    for (const task of Object.values(this.plan.tasks)) {
-      void archiver.archiveOldEntries(task).then((result) => {
-        task.debateLog = result.activeEntries;
-        task.archivedDebatePath = result.archivePath;
-      }).catch(() => {
-        // best-effort archive
-      });
-    }
+    await Promise.all(
+      Object.values(this.plan.tasks).map(async (task) => {
+        try {
+          const result = await archiver.archiveOldEntries(task);
+          task.debateLog = result.activeEntries;
+          task.archivedDebatePath = result.archivePath;
+        } catch {
+          // best-effort archive — never block persist on archive failure
+        }
+      })
+    );
   }
 
   private resolveTaskFromArg(arg?: unknown): TaskNode | undefined {
