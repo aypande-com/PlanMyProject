@@ -150,7 +150,8 @@ export class PlanController implements vscode.Disposable {
   }
 
   private registerWatchers(): void {
-    const watcher = vscode.workspace.createFileSystemWatcher("{planmyproject.md,projectplan.md}");
+    const planFileName = this.getConfiguration().get<string>("planFileName", "planmyproject.md");
+    const watcher = vscode.workspace.createFileSystemWatcher(`**/${planFileName}`);
     this.context.subscriptions.push(
       watcher,
       watcher.onDidCreate(async () => this.refreshPlanState()),
