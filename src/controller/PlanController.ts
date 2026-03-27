@@ -326,7 +326,9 @@ export class PlanController implements vscode.Disposable {
       return;
     }
 
-    await this.refreshScan({ quiet: true });
+    if (!this.isScanFresh()) {
+      await this.refreshScan({ quiet: true });
+    }
 
     const knowledge = await this.researchIndex.queryRelevant({
       taskTitle: task.title,
@@ -558,6 +560,18 @@ export class PlanController implements vscode.Disposable {
     }
   }
 
+  private isScanFresh(): boolean {
+    if (!this.scan?.scannedAt) {
+      return false;
+    }
+    const ttlMinutes = this.getConfiguration().get<number>("scanner.cacheTtlMinutes", 5);
+    if (ttlMinutes <= 0) {
+      return false;
+    }
+    const ageMs = Date.now() - Date.parse(this.scan.scannedAt);
+    return ageMs < ttlMinutes * 60 * 1000;
+  }
+
   private async refreshScan(options?: { quiet?: boolean }): Promise<void> {
     if (!this.plan) {
       await this.refreshPlanState();
@@ -630,7 +644,7 @@ export class PlanController implements vscode.Disposable {
       return;
     }
 
-    if (!this.scan) {
+    if (!this.isScanFresh()) {
       await this.refreshScan({ quiet: true });
     }
 

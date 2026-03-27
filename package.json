@@ -424,6 +424,12 @@
           "default": true,
           "description": "Offer .gitignore updates for scanner cache path under .pmp/."
         },
+        "planmyproject.scanner.cacheTtlMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "description": "How many minutes a workspace scan result is considered fresh. Set to 0 to always rescan before AI operations."
+        },
         "planmyproject.requireAiConsent": {
           "type": "string",
           "enum": [
