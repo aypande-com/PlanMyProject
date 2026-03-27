@@ -57,6 +57,7 @@ export class PlanController implements vscode.Disposable {
   private readonly treeProvider = new PlanTreeProvider();
   private readonly debatePanel: DebatePanel;
   private readonly debateService: DebateService;
+  private readonly outputChannel = vscode.window.createOutputChannel("PlanMyProject");
 
   private planUri: vscode.Uri | undefined;
   private plan: PlanDocument | undefined;
@@ -100,6 +101,7 @@ export class PlanController implements vscode.Disposable {
   dispose(): void {
     this.disposables.forEach((item) => item.dispose());
     this.statusBar.dispose();
+    this.outputChannel.dispose();
   }
 
   private registerCommands(): void {
@@ -782,7 +784,20 @@ export class PlanController implements vscode.Disposable {
     if (!task) {
       return;
     }
-    void vscode.window.showInformationMessage(task.rationale ? `Rationale (${task.id}): ${task.rationale}` : `No rationale recorded for ${task.id}.`);
+
+    this.outputChannel.clear();
+    if (task.rationale) {
+      this.outputChannel.appendLine(`Rationale — [${task.id}] ${task.title}`);
+      this.outputChannel.appendLine("");
+      this.outputChannel.appendLine(task.rationale);
+      if (task.notes) {
+        this.outputChannel.appendLine("");
+        this.outputChannel.appendLine(`Notes: ${task.notes}`);
+      }
+    } else {
+      this.outputChannel.appendLine(`No rationale recorded for [${task.id}] ${task.title}.`);
+    }
+    this.outputChannel.show(true); // preserve focus
   }
 
   private async viewLinkedFiles(arg: unknown): Promise<void> {
