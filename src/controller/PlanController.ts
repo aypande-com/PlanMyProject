@@ -66,6 +66,7 @@ export class PlanController implements vscode.Disposable {
   private activeRequest: vscode.CancellationTokenSource | undefined;
   private sessionAllowAllConsent = false;
   private readonly warnedDebateConflicts = new Set<string>();
+  private isSelfWriting = false;
 
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -150,24 +151,26 @@ export class PlanController implements vscode.Disposable {
     this.context.subscriptions.push(
       watcher,
       watcher.onDidCreate(async () => this.refreshPlanState()),
-      watcher.onDidChange(async () => this.refreshPlanState()),
+      watcher.onDidChange(async () => {
+        if (this.isSelfWriting) {
+          return;
+        }
+        await this.refreshPlanState();
+      }),
       watcher.onDidDelete(async () => this.refreshPlanState()),
       vscode.workspace.onDidSaveTextDocument(async (document) => {
+        if (this.isSelfWriting) {
+          return;
+        }
+        if (this.planUri && document.uri.toString() === this.planUri.toString()) {
+          await this.refreshPlanState();
+          return;
+        }
         const planUris = await findPlanUris();
         if (!planUris.some((uri) => uri.toString() === document.uri.toString())) {
           return;
         }
         await this.refreshPlanState();
-      }),
-      vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-        if (!editor) {
-          return;
-        }
-
-        const planUris = await findPlanUris();
-        if (planUris.some((uri) => uri.toString() === editor.document.uri.toString())) {
-          await this.refreshPlanState();
-        }
       })
     );
   }
@@ -922,10 +925,15 @@ export class PlanController implements vscode.Disposable {
     }
 
     const config = this.getConfiguration();
-    await this.repository.savePlan(this.planUri, this.plan, {
-      researchGate: config.get<boolean>("researchGate", true),
-      showRationaleInline: config.get<boolean>("showRationaleInline", true)
-    });
+    this.isSelfWriting = true;
+    try {
+      await this.repository.savePlan(this.planUri, this.plan, {
+        researchGate: config.get<boolean>("researchGate", true),
+        showRationaleInline: config.get<boolean>("showRationaleInline", true)
+      });
+    } finally {
+      this.isSelfWriting = false;
+    }
 
     const text = await readTextFile(this.planUri);
     const parsed = parsePlanMarkdown(text);
