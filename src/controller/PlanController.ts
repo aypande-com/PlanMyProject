@@ -680,23 +680,32 @@ export class PlanController implements vscode.Disposable {
     }
 
     if (action === "split") {
-      const suggestedTitles = await this.debateService.suggestSplitTitles(task, workspaceSummary);
+      // Ask intent first — only fire an AI call when the user explicitly requests suggestions.
+      const intentPick = await vscode.window.showQuickPick(
+        [
+          { label: "Get AI suggestions", value: "ai" as const },
+          { label: "Enter titles manually", value: "manual" as const }
+        ],
+        { placeHolder: `How would you like to split ${task.id}?` }
+      );
+      if (!intentPick) {
+        return;
+      }
+
       let splitTitles: string[] = [];
 
-      if (suggestedTitles.length > 0) {
-        const picked = await vscode.window.showQuickPick(
-          suggestedTitles.map((title) => ({
-            label: title
-          })),
-          {
-            canPickMany: true,
-            placeHolder: `Select split tasks for ${task.id}`
+      if (intentPick.value === "ai") {
+        const suggestedTitles = await this.debateService.suggestSplitTitles(task, workspaceSummary);
+        if (suggestedTitles.length > 0) {
+          const picked = await vscode.window.showQuickPick(
+            suggestedTitles.map((title) => ({ label: title })),
+            { canPickMany: true, placeHolder: `Select split tasks for ${task.id}` }
+          );
+          if (!picked) {
+            return;
           }
-        );
-        if (!picked) {
-          return;
+          splitTitles = picked.map((item) => item.label);
         }
-        splitTitles = picked.map((item) => item.label);
       }
 
       if (splitTitles.length === 0) {
