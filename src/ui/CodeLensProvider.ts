@@ -3,10 +3,6 @@ import { parsePlanMarkdown } from "../parser";
 
 export class PlanCodeLensProvider implements vscode.CodeLensProvider {
   provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-    if (!document.fileName.toLowerCase().endsWith(".md")) {
-      return [];
-    }
-
     const parsed = parsePlanMarkdown(document.getText());
     const codeLenses: vscode.CodeLens[] = [];
 

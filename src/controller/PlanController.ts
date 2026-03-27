@@ -84,7 +84,10 @@ export class PlanController implements vscode.Disposable {
       this.treeProvider,
       this.statusBar,
       vscode.window.registerTreeDataProvider("planmyproject.tree", this.treeProvider),
-      vscode.languages.registerCodeLensProvider({ scheme: "file", pattern: "**/*.md" }, new (await import("../ui/CodeLensProvider")).PlanCodeLensProvider())
+      vscode.languages.registerCodeLensProvider(
+        { scheme: "file", pattern: `**/${this.getConfiguration().get<string>("planFileName", "planmyproject.md")}` },
+        new (await import("../ui/CodeLensProvider")).PlanCodeLensProvider()
+      )
     );
 
     this.registerCommands();
