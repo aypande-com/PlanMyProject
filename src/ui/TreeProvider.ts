@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import {
-  TASK_TYPE_ICONS,
   getTaskBlockReason,
   type PlanDocument,
   type TaskBlockReason,
@@ -43,17 +42,16 @@ class TaskTreeItem extends vscode.TreeItem {
     const blocked = blockReason !== undefined;
 
     super(
-      `${blocked ? "🔒 " : ""}${TASK_TYPE_ICONS[task.type]} ${task.title}`,
+      task.title,
       task.children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
     );
 
     const confidence = task.confidence === null ? "n/a" : `${Math.round(task.confidence * 100)}%`;
-    const confidenceBadge = formatConfidenceBadge(task);
     const originBadge = formatOriginBadge(task);
     const requestDetail = requestStatus?.taskId === task.id ? ` • ${requestStatus.detail}` : "";
 
     this.id = task.id;
-    this.description = `${task.id} • ${originBadge}${confidenceBadge ? ` • ${confidenceBadge}` : ""}${blocked ? " • blocked" : ""}${requestDetail}`;
+    this.description = `${task.id} • ${task.type} • ${originBadge}${blocked ? " • blocked" : ""}${requestDetail}`;
     this.tooltip = [
       `${task.id} [${task.status}] ${task.type}`,
       `Goal: ${task.goalRef ?? "none"}`,
@@ -88,6 +86,7 @@ export class PlanTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem
   private scan: WorkspaceScan | undefined;
   private requestStatus: RequestStatus | undefined;
   private researchGate = true;
+  private statusThrottleTimer: ReturnType<typeof setTimeout> | undefined;
 
   setPlan(plan: PlanDocument, sourceUri?: vscode.Uri, researchGate = true): void {
     this.plan = plan;
@@ -103,7 +102,23 @@ export class PlanTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem
 
   setRequestStatus(status: RequestStatus | undefined): void {
     this.requestStatus = status;
-    this.refresh();
+    // Throttle redraws during active streaming to at most once per 500 ms.
+    // When status is cleared (undefined) or reaches a terminal state, flush immediately.
+    const isTerminal = !status || status.state !== "running";
+    if (isTerminal) {
+      if (this.statusThrottleTimer !== undefined) {
+        clearTimeout(this.statusThrottleTimer);
+        this.statusThrottleTimer = undefined;
+      }
+      this.refresh();
+      return;
+    }
+    if (this.statusThrottleTimer === undefined) {
+      this.statusThrottleTimer = setTimeout(() => {
+        this.statusThrottleTimer = undefined;
+        this.refresh();
+      }, 500);
+    }
   }
 
   refresh(): void {
@@ -111,6 +126,9 @@ export class PlanTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem
   }
 
   dispose(): void {
+    if (this.statusThrottleTimer !== undefined) {
+      clearTimeout(this.statusThrottleTimer);
+    }
     this.emitter.dispose();
   }
 
@@ -211,17 +229,4 @@ function formatOriginBadge(task: TaskNode): string {
     return "INF";
   }
   return "ME";
-}
-
-function formatConfidenceBadge(task: TaskNode): string | undefined {
-  if (task.origin !== "ai-generated" || task.confidence === null) {
-    return undefined;
-  }
-  if (task.confidence >= 0.8) {
-    return "🟢";
-  }
-  if (task.confidence >= 0.5) {
-    return "🟡";
-  }
-  return "🔴";
 }
