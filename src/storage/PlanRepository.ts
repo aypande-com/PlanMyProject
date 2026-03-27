@@ -33,12 +33,13 @@ export class PlanRepository {
     return { uri, parsed };
   }
 
-  async savePlan(uri: vscode.Uri, plan: PlanDocument, options?: { researchGate?: boolean; showRationaleInline?: boolean }): Promise<void> {
+  async savePlan(uri: vscode.Uri, plan: PlanDocument, options?: { researchGate?: boolean; showRationaleInline?: boolean }): Promise<string> {
     const serialized = serializePlanMarkdown(plan, {
       researchGate: options?.researchGate,
       showRationaleInline: options?.showRationaleInline
     });
     await writeTextFile(uri, serialized);
+    return serialized;
   }
 
   async createV1Backup(uri: vscode.Uri, content: string): Promise<vscode.Uri> {

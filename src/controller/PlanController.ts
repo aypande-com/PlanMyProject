@@ -926,8 +926,9 @@ export class PlanController implements vscode.Disposable {
 
     const config = this.getConfiguration();
     this.isSelfWriting = true;
+    let serialized: string;
     try {
-      await this.repository.savePlan(this.planUri, this.plan, {
+      serialized = await this.repository.savePlan(this.planUri, this.plan, {
         researchGate: config.get<boolean>("researchGate", true),
         showRationaleInline: config.get<boolean>("showRationaleInline", true)
       });
@@ -935,8 +936,7 @@ export class PlanController implements vscode.Disposable {
       this.isSelfWriting = false;
     }
 
-    const text = await readTextFile(this.planUri);
-    const parsed = parsePlanMarkdown(text);
+    const parsed = parsePlanMarkdown(serialized);
     this.plan = parsed.plan;
 
     this.maybeArchiveDebateEntries();
