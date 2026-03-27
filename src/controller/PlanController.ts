@@ -25,7 +25,7 @@ import { TaskGenerator } from "../generation";
 import { WorkspaceScanner } from "../scanner";
 import { ResearchIndex } from "../research";
 import { DebateArchiver, DebatePanel, DebateService, type DebateAction } from "../debate";
-import { createGoalIdGenerator, createTaskIdGenerator, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath } from "../util";
+import { createTaskIdGenerator, parseGoalMarkdown, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath } from "../util";
 import { GoalSetupPanel, PlanStatusBar, PlanTreeProvider } from "../ui";
 
 const ACTIVE_REQUEST_CLEAR_MS = 2200;
@@ -1380,25 +1380,7 @@ export class PlanController implements vscode.Disposable {
   }
 
   private parseGoalFromMarkdown(content: string, existingGoals: ProjectGoal[]): ProjectGoal {
-    const goalIdFactory = createGoalIdGenerator(existingGoals);
-    const lines = content.split(/\r?\n/);
-    const heading = lines.find((line) => /^#{1,2}\s+/.test(line.trim()));
-    const statement = heading
-      ? heading.replace(/^#{1,2}\s+/, "").trim()
-      : lines.find((line) => line.trim().length > 0)?.trim() ?? "Imported project goal";
-
-    const bulletLines = lines
-      .filter((line) => /^\s*[-*+]\s+/.test(line))
-      .map((line) => line.replace(/^\s*[-*+]\s+/, "").trim())
-      .filter((line) => line.length > 0);
-
-    return {
-      id: goalIdFactory(),
-      statement,
-      successCriteria: bulletLines.slice(0, 6),
-      constraints: [],
-      outOfScope: []
-    };
+    return parseGoalMarkdown(content, existingGoals);
   }
 
   private async maybeSuggestStarterRootTasks(goal: ProjectGoal): Promise<number> {
