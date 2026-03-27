@@ -1,6 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import type { CoverageHint, ProjectGoal, SignatureSummary, WorkspaceScan } from "../model/index";
+import type { CoverageHint, ModuleInfo, ProjectGoal, SignatureSummary, WorkspaceScan } from "../model/index";
 import { detectLanguagesByExtension } from "./LanguageDetector";
 import { extractDependencies } from "./DependencyExtractor";
 import { extractSignatures } from "./SignatureExtractor";
@@ -32,6 +32,33 @@ export interface ScanOptions {
   goals?: ProjectGoal[];
   settings?: Partial<WorkspaceScannerSettings>;
   onProgress?: (message: string) => void;
+}
+
+/**
+ * Pure function: update signature entries for a set of files within an existing
+ * module list. Modules that contain none of the updated files are returned
+ * unchanged. This is the testable core of the task-scoped refresh.
+ */
+export function patchModuleSignatures(
+  modules: ModuleInfo[],
+  updatedSignatures: Map<string, SignatureSummary>
+): ModuleInfo[] {
+  if (updatedSignatures.size === 0) {
+    return modules;
+  }
+
+  return modules.map((module) => {
+    const hasAffectedFile = module.files.some((file) => updatedSignatures.has(file));
+    if (!hasAffectedFile) {
+      return module;
+    }
+
+    const nextSignatures = module.files
+      .map((file) => updatedSignatures.get(file) ?? module.signatures.find((sig) => sig.file === file))
+      .filter((sig): sig is SignatureSummary => Boolean(sig));
+
+    return { ...module, signatures: nextSignatures };
+  });
 }
 
 export class WorkspaceScanner {
@@ -94,6 +121,46 @@ export class WorkspaceScanner {
       missingAreas,
       dependencies,
       testCoverage
+    };
+  }
+
+  /**
+   * Lightweight refresh: re-reads only the given linked file paths, re-extracts
+   * their signatures, and patches those entries into a copy of the existing scan.
+   * Falls back to a full scan when existingScan is undefined.
+   */
+  async refreshLinkedFiles(
+    linkedFiles: string[],
+    existingScan: WorkspaceScan,
+    settings?: Partial<WorkspaceScannerSettings>
+  ): Promise<WorkspaceScan> {
+    const root = getWorkspaceRootUri();
+    const resolved = { ...DEFAULT_SETTINGS, ...(settings ?? {}) };
+    const updatedSignatures = new Map<string, SignatureSummary>();
+
+    if (resolved.extractSignatures) {
+      await Promise.all(
+        linkedFiles
+          .filter((file) => isSourceFile(file) && !isGeneratedPath(file))
+          .map(async (file) => {
+            try {
+              const uri = vscode.Uri.joinPath(root, ...file.split("/"));
+              const bytes = await vscode.workspace.fs.readFile(uri);
+              if (bytes.length <= resolved.maxFileSizeKb * 1024) {
+                const content = Buffer.from(bytes).toString("utf8");
+                updatedSignatures.set(file, extractSignatures(file, content, { maxPerFile: 200 }));
+              }
+            } catch {
+              // file may have been deleted since last scan — skip silently
+            }
+          })
+      );
+    }
+
+    return {
+      ...existingScan,
+      scannedAt: new Date().toISOString(),
+      modules: patchModuleSignatures(existingScan.modules, updatedSignatures)
     };
   }
 }

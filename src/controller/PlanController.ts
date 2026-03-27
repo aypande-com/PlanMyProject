@@ -623,20 +623,35 @@ export class PlanController implements vscode.Disposable {
       await this.refreshPlanState();
     }
     const task = this.resolveTaskFromArg(arg);
-    await this.refreshScan({ quiet: true });
 
-    if (!task) {
-      void vscode.window.showInformationMessage("Workspace scan refreshed.");
+    // No task or no linked files → full workspace scan.
+    if (!task || task.linkedFiles.length === 0) {
+      await this.refreshScan({ quiet: true });
+      const msg = task
+        ? `Workspace scan refreshed for ${task.id}. No linked files on this task.`
+        : "Workspace scan refreshed.";
+      void vscode.window.showInformationMessage(msg);
       return;
+    }
+
+    // Task has linked files and a prior scan exists → lightweight targeted refresh.
+    if (this.scan) {
+      const config = this.getConfiguration();
+      this.scan = await this.scanner.refreshLinkedFiles(task.linkedFiles, this.scan, {
+        extractSignatures: config.get<boolean>("scanner.extractSignatures", true),
+        maxFileSizeKb: config.get<number>("scanner.maxFileSizeKb", 50)
+      });
+      await this.scanCacheStore.save(this.scan);
+      this.treeProvider.setWorkspaceScan(this.scan);
+      this.statusBar.setScanTimestamp(this.scan.scannedAt);
+    } else {
+      await this.refreshScan({ quiet: true });
     }
 
     const linkedCount = task.linkedFiles.length;
-    if (linkedCount === 0) {
-      void vscode.window.showInformationMessage(`Workspace scan refreshed for ${task.id}. No linked files on this task.`);
-      return;
-    }
-
-    void vscode.window.showInformationMessage(`Workspace scan refreshed for ${task.id} (${linkedCount} linked file${linkedCount === 1 ? "" : "s"}).`);
+    void vscode.window.showInformationMessage(
+      `Signatures refreshed for ${task.id} (${linkedCount} linked file${linkedCount === 1 ? "" : "s"}).`
+    );
   }
 
   private async debateTask(arg: unknown): Promise<void> {
