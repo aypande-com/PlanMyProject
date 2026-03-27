@@ -101,12 +101,10 @@ export class WorkspaceScanner {
 async function discoverFiles(root: vscode.Uri, matcher: IgnoreMatcher, maxFiles: number): Promise<string[]> {
   const discovered: string[] = [];
   const queue: Array<{ uri: vscode.Uri; relativePath: string }> = [{ uri: root, relativePath: "" }];
+  let head = 0; // index-based dequeue avoids O(n) array shift
 
-  while (queue.length > 0 && discovered.length < maxFiles) {
-    const current = queue.shift();
-    if (!current) {
-      break;
-    }
+  while (head < queue.length && discovered.length < maxFiles) {
+    const current = queue[head++];
 
     const entries = await vscode.workspace.fs.readDirectory(current.uri);
     for (const [name, type] of entries) {
