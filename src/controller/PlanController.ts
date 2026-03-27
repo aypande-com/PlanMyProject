@@ -31,7 +31,6 @@ import { GoalSetupPanel, PlanStatusBar, PlanTreeProvider } from "../ui";
 const ACTIVE_REQUEST_CLEAR_MS = 2200;
 const MAX_LINKED_FILE_CONTENT_BYTES = 45_000;
 const MAX_LINKED_FILES_IN_PROMPT = 8;
-const CONSENT_STATE_KEY = "planmyproject.sessionAllowAllConsent";
 const LAST_SCAN_STATE_KEY = "planmyproject.lastScanTimestamp";
 const GITIGNORE_SUGGESTION_STATE_KEY = "planmyproject.gitignoreSuggestionDismissed";
 
@@ -91,7 +90,6 @@ export class PlanController implements vscode.Disposable {
     this.registerWatchers();
 
     this.scan = await this.scanCacheStore.load();
-    this.sessionAllowAllConsent = this.context.workspaceState.get<boolean>(CONSENT_STATE_KEY, false);
     const lastScanFromState = this.context.workspaceState.get<string>(LAST_SCAN_STATE_KEY);
     this.treeProvider.setWorkspaceScan(this.scan);
     this.statusBar.setScanTimestamp(this.scan?.scannedAt ?? lastScanFromState);
@@ -1242,7 +1240,13 @@ export class PlanController implements vscode.Disposable {
   }
 
   private async ensureAiConsent(operation: string, summaryLines: string[]): Promise<boolean> {
-    if (this.sessionAllowAllConsent) {
+    const consentMode = this.getConfiguration().get<string>("requireAiConsent", "first-per-session");
+
+    if (consentMode === "never") {
+      return true;
+    }
+
+    if (consentMode === "first-per-session" && this.sessionAllowAllConsent) {
       return true;
     }
 
@@ -1257,12 +1261,11 @@ export class PlanController implements vscode.Disposable {
       message,
       { modal: true },
       "Send to AI",
-      "Allow All"
+      "Allow for this session"
     );
 
-    if (decision === "Allow All") {
+    if (decision === "Allow for this session") {
       this.sessionAllowAllConsent = true;
-      await this.context.workspaceState.update(CONSENT_STATE_KEY, true);
       return true;
     }
 

@@ -423,6 +423,21 @@
           "type": "boolean",
           "default": true,
           "description": "Offer .gitignore updates for scanner cache path under .pmp/."
+        },
+        "planmyproject.requireAiConsent": {
+          "type": "string",
+          "enum": [
+            "always",
+            "first-per-session",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Prompt before every AI operation.",
+            "Prompt once per VS Code session; subsequent operations in the same session are allowed automatically.",
+            "Never prompt — send context to AI without confirmation."
+          ],
+          "default": "first-per-session",
+          "description": "Controls when PlanMyProject asks for confirmation before sending context to the AI provider."
         }
       }
     }
