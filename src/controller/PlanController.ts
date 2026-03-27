@@ -812,7 +812,23 @@ export class PlanController implements vscode.Disposable {
     }
 
     const root = getWorkspaceRootUri();
-    for (const filePath of task.linkedFiles) {
+
+    // With a single linked file skip the picker and open directly.
+    let filesToOpen: string[];
+    if (task.linkedFiles.length === 1) {
+      filesToOpen = task.linkedFiles;
+    } else {
+      const picks = await vscode.window.showQuickPick(
+        task.linkedFiles.map((filePath) => ({ label: filePath })),
+        { canPickMany: true, placeHolder: `Open linked files for ${task.id}` }
+      );
+      if (!picks) {
+        return;
+      }
+      filesToOpen = picks.map((pick) => pick.label);
+    }
+
+    for (const filePath of filesToOpen) {
       const uri = vscode.Uri.joinPath(root, ...filePath.split("/"));
       if (!(await uriExists(uri))) {
         continue;
