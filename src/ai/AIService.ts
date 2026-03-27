@@ -9,6 +9,8 @@ export type AIProviderId = "copilot" | "claude" | "openai";
 
 export class AIService {
   private readonly copilotProvider = new CopilotProvider();
+  private cachedClaudeProvider: { key: string; provider: ClaudeProvider } | undefined;
+  private cachedOpenAiProvider: { key: string; provider: OpenAIProvider } | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -43,19 +45,23 @@ export class AIService {
       ? "planmyproject.claudeApiKey"
       : "planmyproject.openaiApiKey";
 
-    const secret = await this.context.secrets.get(secretName);
-    if (secret && secret.trim()) {
-      return secret.trim();
-    }
-
     const configuration = vscode.workspace.getConfiguration("planmyproject");
-    const legacySetting = provider === "claude"
+    const configuredSetting = provider === "claude"
       ? configuration.get<string>("claudeApiKey", "")
       : configuration.get<string>("openaiApiKey", "");
+    const normalizedSetting = configuredSetting?.trim();
+    const normalizedSecret = (await this.context.secrets.get(secretName))?.trim();
 
-    if (legacySetting?.trim()) {
-      await this.context.secrets.store(secretName, legacySetting.trim());
-      return legacySetting.trim();
+    // If user explicitly set a key in settings, use it and refresh secret storage.
+    if (normalizedSetting) {
+      if (normalizedSetting !== normalizedSecret) {
+        await this.context.secrets.store(secretName, normalizedSetting);
+      }
+      return normalizedSetting;
+    }
+
+    if (normalizedSecret) {
+      return normalizedSecret;
     }
 
     return undefined;
@@ -73,13 +79,19 @@ export class AIService {
       if (!key) {
         throw new Error("Claude provider selected but API key is not configured.");
       }
-      return new ClaudeProvider(key);
+      if (this.cachedClaudeProvider?.key !== key) {
+        this.cachedClaudeProvider = { key, provider: new ClaudeProvider(key) };
+      }
+      return this.cachedClaudeProvider.provider;
     }
 
     const openAiKey = await this.getApiKey("openai");
     if (!openAiKey) {
       throw new Error("OpenAI provider selected but API key is not configured.");
     }
-    return new OpenAIProvider(openAiKey);
+    if (this.cachedOpenAiProvider?.key !== openAiKey) {
+      this.cachedOpenAiProvider = { key: openAiKey, provider: new OpenAIProvider(openAiKey) };
+    }
+    return this.cachedOpenAiProvider.provider;
   }
 }
