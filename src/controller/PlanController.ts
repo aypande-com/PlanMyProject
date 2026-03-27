@@ -279,7 +279,6 @@ export class PlanController implements vscode.Disposable {
     });
 
     addTask(this.plan, task);
-    recomputeDerivedStatuses(this.plan);
     await this.persistAndRefresh();
   }
 
@@ -391,7 +390,8 @@ export class PlanController implements vscode.Disposable {
         addTask(this.plan as PlanDocument, created);
       }
 
-      recomputeDerivedStatuses(this.plan as PlanDocument);
+      // recomputeDerivedStatuses is called inside persistAndRefresh → serializePlanMarkdown,
+      // and the result is reflected back via parsePlanMarkdown. No separate call needed here.
       await this.persistAndRefresh();
 
       void vscode.window.showInformationMessage(
@@ -517,7 +517,6 @@ export class PlanController implements vscode.Disposable {
     }
 
     deleteTask(this.plan, task.id);
-    recomputeDerivedStatuses(this.plan);
     await this.persistAndRefresh();
   }
 
