@@ -13,26 +13,24 @@ import {
   type ProjectGoal,
   type TaskBlockReason,
   type TaskNode,
-  type TaskType,
-  type WorkspaceScan
+  type TaskType
 } from "../model/index";
 import { parsePlanMarkdown, upgradeSchemaV1ToV2 } from "../parser";
-import { PlanRepository, ScanCacheStore, findPlanUris, getGitUserName, getWorkspaceRootUri, hasOpenWorkspace, readTextFile, uriExists, writeTextFile } from "../storage";
+import { PlanRepository, findPlanUris, getGitUserName, getWorkspaceRootUri, hasOpenWorkspace, readTextFile, uriExists } from "../storage";
 import { buildImplementationPrompt, summarizeDraftTasks } from "../ai/PromptBuilder";
 import { parseImplementationResponse } from "../ai/ResponseParser";
 import { AIService } from "../ai/AIService";
 import { TaskGenerator } from "../generation";
-import { WorkspaceScanner } from "../scanner";
 import { ResearchIndex } from "../research";
 import { DebateArchiver, DebatePanel, DebateService, type DebateAction } from "../debate";
 import { createTaskIdGenerator, parseGoalMarkdown, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath } from "../util";
 import { GoalSetupPanel, PlanStatusBar, PlanTreeProvider } from "../ui";
+import { ScanService } from "../scanner/ScanService";
+import { ConsentService } from "../ai/ConsentService";
 
 const ACTIVE_REQUEST_CLEAR_MS = 2200;
 const MAX_LINKED_FILE_CONTENT_BYTES = 45_000;
 const MAX_LINKED_FILES_IN_PROMPT = 8;
-const LAST_SCAN_STATE_KEY = "planmyproject.lastScanTimestamp";
-const GITIGNORE_SUGGESTION_STATE_KEY = "planmyproject.gitignoreSuggestionDismissed";
 
 interface TaskCommandRef {
   taskId?: string;
@@ -47,8 +45,6 @@ interface StarterTaskSuggestion {
 
 export class PlanController implements vscode.Disposable {
   private readonly repository: PlanRepository;
-  private readonly scanCacheStore = new ScanCacheStore();
-  private readonly scanner = new WorkspaceScanner();
   private readonly aiService: AIService;
   private readonly taskGenerator: TaskGenerator;
   private readonly researchIndex = new ResearchIndex();
@@ -58,13 +54,13 @@ export class PlanController implements vscode.Disposable {
   private readonly debatePanel: DebatePanel;
   private readonly debateService: DebateService;
   private readonly outputChannel = vscode.window.createOutputChannel("PlanMyProject");
+  private readonly scanService: ScanService;
+  private readonly consentService: ConsentService;
 
   private planUri: vscode.Uri | undefined;
   private plan: PlanDocument | undefined;
-  private scan: WorkspaceScan | undefined;
 
   private activeRequest: vscode.CancellationTokenSource | undefined;
-  private sessionAllowAllConsent = false;
   private readonly warnedDebateConflicts = new Set<string>();
   private isSelfWriting = false;
 
@@ -77,6 +73,14 @@ export class PlanController implements vscode.Disposable {
     this.taskGenerator = new TaskGenerator(this.aiService);
     this.debatePanel = new DebatePanel(context.extensionUri);
     this.debateService = new DebateService(this.aiService, async () => getGitUserName());
+    this.scanService = new ScanService(
+      context,
+      () => this.getConfiguration(),
+      this.treeProvider,
+      this.statusBar,
+      () => this.plan?.goals ?? []
+    );
+    this.consentService = new ConsentService(() => this.getConfiguration());
   }
 
   async activate(): Promise<void> {
@@ -93,10 +97,7 @@ export class PlanController implements vscode.Disposable {
     this.registerCommands();
     this.registerWatchers();
 
-    this.scan = await this.scanCacheStore.load();
-    const lastScanFromState = this.context.workspaceState.get<string>(LAST_SCAN_STATE_KEY);
-    this.treeProvider.setWorkspaceScan(this.scan);
-    this.statusBar.setScanTimestamp(this.scan?.scannedAt ?? lastScanFromState);
+    await this.scanService.loadCached();
 
     await this.refreshPlanState();
   }
@@ -192,7 +193,7 @@ export class PlanController implements vscode.Disposable {
     await vscode.window.showTextDocument(doc, { preview: false });
     await this.refreshPlanState();
 
-    if (!this.scan) {
+    if (!this.scanService.getScan()) {
       await this.refreshScan({ quiet: true });
     }
   }
@@ -246,9 +247,9 @@ export class PlanController implements vscode.Disposable {
 
     const researchGate = this.getConfiguration().get<boolean>("researchGate", true);
     this.treeProvider.setPlan(this.plan, this.planUri, researchGate);
-    this.treeProvider.setWorkspaceScan(this.scan);
+    this.treeProvider.setWorkspaceScan(this.scanService.getScan());
     this.statusBar.setMissingGoal(this.plan.goals.length === 0);
-    this.statusBar.setScanTimestamp(this.scan?.scannedAt);
+    this.statusBar.setScanTimestamp(this.scanService.getScan()?.scannedAt);
 
     void vscode.commands.executeCommand("setContext", "planmyproject.workspaceOpen", hasOpenWorkspace());
     void vscode.commands.executeCommand("setContext", "planmyproject.treeEmpty", this.plan.rootTaskIds.length === 0);
@@ -323,7 +324,7 @@ export class PlanController implements vscode.Disposable {
       return;
     }
 
-    if (!(await this.ensureAiConsent(`Plan task ${task.id}`, [
+    if (!(await this.consentService.requestConsent(`Plan task ${task.id}`, [
       `Task: [${task.id}] ${task.title}`,
       `Provider: ${this.aiService.getSelectedProvider()}`,
       "Workspace scan summary and research index entries may be sent."
@@ -336,7 +337,7 @@ export class PlanController implements vscode.Disposable {
       return;
     }
 
-    if (!this.isScanFresh()) {
+    if (!this.scanService.isFresh()) {
       await this.refreshScan({ quiet: true });
     }
 
@@ -350,7 +351,7 @@ export class PlanController implements vscode.Disposable {
       const output = await this.taskGenerator.generate({
         plan: this.plan as PlanDocument,
         parent: task,
-        scan: this.scan,
+        scan: this.scanService.getScan(),
         knowledge,
         confidenceThreshold: this.getConfiguration().get<number>("confidenceThreshold", 0.5),
         includeSignatures: this.getConfiguration().get<boolean>("scanner.extractSignatures", true),
@@ -444,7 +445,7 @@ export class PlanController implements vscode.Disposable {
       researchConclusions: conclusions
     });
 
-    if (!(await this.ensureAiConsent(`Implement task ${task.id}`, [
+    if (!(await this.consentService.requestConsent(`Implement task ${task.id}`, [
       `Task: [${task.id}] ${task.title}`,
       `Provider: ${this.aiService.getSelectedProvider()}`,
       `Linked files included: ${linkedSnapshots.length}`
@@ -570,56 +571,11 @@ export class PlanController implements vscode.Disposable {
     }
   }
 
-  private isScanFresh(): boolean {
-    if (!this.scan?.scannedAt) {
-      return false;
-    }
-    const ttlMinutes = this.getConfiguration().get<number>("scanner.cacheTtlMinutes", 5);
-    if (ttlMinutes <= 0) {
-      return false;
-    }
-    const ageMs = Date.now() - Date.parse(this.scan.scannedAt);
-    return ageMs < ttlMinutes * 60 * 1000;
-  }
-
   private async refreshScan(options?: { quiet?: boolean }): Promise<void> {
     if (!this.plan) {
       await this.refreshPlanState();
     }
-
-    const config = this.getConfiguration();
-    const maxFiles = config.get<number>("scanner.maxFilesScanned", 500);
-    const maxFileSizeKb = config.get<number>("scanner.maxFileSizeKb", 50);
-    const extractSignatures = config.get<boolean>("scanner.extractSignatures", true);
-
-    this.scan = await this.scanner.scan({
-      goals: this.plan?.goals,
-      settings: {
-        maxFilesScanned: maxFiles,
-        maxFileSizeKb,
-        extractSignatures
-      },
-      onProgress: (detail) => {
-        this.statusBar.setActiveRequest(true);
-        this.treeProvider.setRequestStatus({
-          taskId: this.plan?.rootTaskIds[0] ?? "scan",
-          detail,
-          state: "running"
-        });
-      }
-    });
-
-    await this.scanCacheStore.save(this.scan);
-    await this.context.workspaceState.update(LAST_SCAN_STATE_KEY, this.scan.scannedAt);
-    await this.maybeSuggestGitignoreEntry();
-    this.treeProvider.setWorkspaceScan(this.scan);
-    this.statusBar.setActiveRequest(false);
-    this.statusBar.setScanTimestamp(this.scan.scannedAt);
-    this.treeProvider.setRequestStatus(undefined);
-
-    if (!options?.quiet) {
-      void vscode.window.showInformationMessage(`Workspace scan complete: ${this.scan.modules.length} module(s).`);
-    }
+    await this.scanService.refresh(options);
   }
 
   private async scanTask(arg: unknown): Promise<void> {
@@ -630,7 +586,7 @@ export class PlanController implements vscode.Disposable {
 
     // No task or no linked files → full workspace scan.
     if (!task || task.linkedFiles.length === 0) {
-      await this.refreshScan({ quiet: true });
+      await this.scanService.refresh({ quiet: true });
       const msg = task
         ? `Workspace scan refreshed for ${task.id}. No linked files on this task.`
         : "Workspace scan refreshed.";
@@ -638,20 +594,8 @@ export class PlanController implements vscode.Disposable {
       return;
     }
 
-    // Task has linked files and a prior scan exists → lightweight targeted refresh.
-    if (this.scan) {
-      const config = this.getConfiguration();
-      this.scan = await this.scanner.refreshLinkedFiles(task.linkedFiles, this.scan, {
-        extractSignatures: config.get<boolean>("scanner.extractSignatures", true),
-        maxFileSizeKb: config.get<number>("scanner.maxFileSizeKb", 50)
-      });
-      await this.scanCacheStore.save(this.scan);
-      this.treeProvider.setWorkspaceScan(this.scan);
-      this.statusBar.setScanTimestamp(this.scan.scannedAt);
-    } else {
-      await this.refreshScan({ quiet: true });
-    }
-
+    // Task has linked files → lightweight targeted refresh (falls back to full scan internally).
+    await this.scanService.refreshForTask(task);
     const linkedCount = task.linkedFiles.length;
     void vscode.window.showInformationMessage(
       `Signatures refreshed for ${task.id} (${linkedCount} linked file${linkedCount === 1 ? "" : "s"}).`
@@ -669,7 +613,7 @@ export class PlanController implements vscode.Disposable {
       return;
     }
 
-    if (!this.isScanFresh()) {
+    if (!this.scanService.isFresh()) {
       await this.refreshScan({ quiet: true });
     }
 
@@ -1216,12 +1160,13 @@ export class PlanController implements vscode.Disposable {
   }
 
   private async confirmWriteToCompleteFiles(paths: string[]): Promise<boolean> {
-    if (!this.scan || paths.length === 0) {
+    const scan = this.scanService.getScan();
+    if (!scan || paths.length === 0) {
       return true;
     }
 
     const completeFiles = new Set(
-      this.scan.modules
+      scan.modules
         .filter((module) => module.estimatedCompletion === "complete")
         .flatMap((module) => module.files.map((file) => file.replace(/\\/g, "/").toLowerCase()))
     );
@@ -1244,48 +1189,6 @@ export class PlanController implements vscode.Disposable {
       "Apply"
     );
     return decision === "Apply";
-  }
-
-  private async maybeSuggestGitignoreEntry(): Promise<void> {
-    const config = this.getConfiguration();
-    if (!config.get<boolean>("gitignorePmpDir", true)) {
-      return;
-    }
-    if (this.context.workspaceState.get<boolean>(GITIGNORE_SUGGESTION_STATE_KEY, false)) {
-      return;
-    }
-
-    const root = getWorkspaceRootUri();
-    const gitignoreUri = vscode.Uri.joinPath(root, ".gitignore");
-    let content = "";
-
-    if (await uriExists(gitignoreUri)) {
-      content = await readTextFile(gitignoreUri);
-      if (/(^|\n)\s*\.pmp\/scan-cache\.json\s*(\n|$)/.test(content) || /(^|\n)\s*\.pmp\/\s*(\n|$)/.test(content)) {
-        return;
-      }
-    }
-
-    const decision = await vscode.window.showInformationMessage(
-      "Add `.pmp/scan-cache.json` to .gitignore? This scan cache is machine-specific.",
-      "Add",
-      "Not now",
-      "Don't ask again"
-    );
-
-    if (!decision || decision === "Not now") {
-      return;
-    }
-
-    if (decision === "Don't ask again") {
-      await this.context.workspaceState.update(GITIGNORE_SUGGESTION_STATE_KEY, true);
-      return;
-    }
-
-    const next = appendGitignoreLine(content, ".pmp/scan-cache.json");
-    await writeTextFile(gitignoreUri, next);
-    await this.context.workspaceState.update(GITIGNORE_SUGGESTION_STATE_KEY, true);
-    void vscode.window.showInformationMessage("Added `.pmp/scan-cache.json` to .gitignore.");
   }
 
   private async withActiveRequest(taskId: string, runner: (token: vscode.CancellationToken) => Promise<void>): Promise<void> {
@@ -1319,39 +1222,6 @@ export class PlanController implements vscode.Disposable {
       source.dispose();
       this.statusBar.setActiveRequest(false);
     }
-  }
-
-  private async ensureAiConsent(operation: string, summaryLines: string[]): Promise<boolean> {
-    const consentMode = this.getConfiguration().get<string>("requireAiConsent", "first-per-session");
-
-    if (consentMode === "never") {
-      return true;
-    }
-
-    if (consentMode === "first-per-session" && this.sessionAllowAllConsent) {
-      return true;
-    }
-
-    const message = [
-      `${operation} sends context to configured AI provider.`,
-      "Summary:",
-      ...summaryLines.map((line) => `- ${line}`),
-      "Continue?"
-    ].join("\n");
-
-    const decision = await vscode.window.showWarningMessage(
-      message,
-      { modal: true },
-      "Send to AI",
-      "Allow for this session"
-    );
-
-    if (decision === "Allow for this session") {
-      this.sessionAllowAllConsent = true;
-      return true;
-    }
-
-    return decision === "Send to AI";
   }
 
   private async promptTaskType(): Promise<TaskType | undefined> {
@@ -1543,21 +1413,22 @@ export class PlanController implements vscode.Disposable {
   }
 
   private buildWorkspaceSummary(): string {
-    if (!this.scan) {
+    const scan = this.scanService.getScan();
+    if (!scan) {
       return "Workspace scan unavailable.";
     }
 
     const summaryLines: string[] = [];
-    summaryLines.push(`Scanned: ${this.scan.scannedAt}`);
-    summaryLines.push(`Languages: ${this.scan.detectedLanguages.map((item) => `${item.language}(${item.files})`).join(", ") || "none"}`);
-    summaryLines.push(`Modules: ${this.scan.modules.length}`);
+    summaryLines.push(`Scanned: ${scan.scannedAt}`);
+    summaryLines.push(`Languages: ${scan.detectedLanguages.map((item) => `${item.language}(${item.files})`).join(", ") || "none"}`);
+    summaryLines.push(`Modules: ${scan.modules.length}`);
 
-    for (const module of this.scan.modules.slice(0, 8)) {
+    for (const module of scan.modules.slice(0, 8)) {
       summaryLines.push(`- ${module.name}: ${module.estimatedCompletion} (${module.files.length} files)`);
     }
 
-    if (this.scan.missingAreas.length > 0) {
-      summaryLines.push(`Missing Areas: ${this.scan.missingAreas.join(", ")}`);
+    if (scan.missingAreas.length > 0) {
+      summaryLines.push(`Missing Areas: ${scan.missingAreas.join(", ")}`);
     }
 
     return summaryLines.join("\n");
@@ -1576,14 +1447,6 @@ export class PlanController implements vscode.Disposable {
     }
     return "Unknown error.";
   }
-}
-
-function appendGitignoreLine(content: string, line: string): string {
-  const trimmed = content.trimEnd();
-  if (!trimmed) {
-    return `${line}\n`;
-  }
-  return `${trimmed}\n${line}\n`;
 }
 
 function taskTypeLabel(type: TaskType): string {
