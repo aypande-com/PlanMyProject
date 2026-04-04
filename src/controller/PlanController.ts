@@ -10,7 +10,6 @@ import {
   recomputeDerivedStatuses,
   type FileSendPolicy,
   type PlanDocument,
-  type ProjectGoal,
   type TaskBlockReason,
   type TaskNode,
   type TaskType
@@ -23,32 +22,26 @@ import { AIService } from "../ai/AIService";
 import { TaskGenerator } from "../generation";
 import { ResearchIndex } from "../research";
 import { DebateArchiver, DebatePanel, DebateService, type DebateAction } from "../debate";
-import { createTaskIdGenerator, parseGoalMarkdown, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath } from "../util";
+import { createTaskIdGenerator, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath } from "../util";
 import { GoalSetupPanel, PlanStatusBar, PlanTreeProvider } from "../ui";
 import { ScanService } from "../scanner/ScanService";
 import { ConsentService } from "../ai/ConsentService";
+import { GoalCommandService } from "./GoalCommandService";
 
 const ACTIVE_REQUEST_CLEAR_MS = 2200;
 const MAX_LINKED_FILE_CONTENT_BYTES = 45_000;
 const MAX_LINKED_FILES_IN_PROMPT = 8;
 
-interface TaskCommandRef {
+export interface TaskCommandRef {
   taskId?: string;
   fileUri?: vscode.Uri;
-}
-
-interface StarterTaskSuggestion {
-  title: string;
-  type: TaskType;
-  detail: string;
 }
 
 export class PlanController implements vscode.Disposable {
   private readonly repository: PlanRepository;
   private readonly aiService: AIService;
   private readonly taskGenerator: TaskGenerator;
-  private readonly researchIndex = new ResearchIndex();
-  private readonly goalSetupPanel = new GoalSetupPanel();
+  private readonly researchIndex: ResearchIndex;
   private readonly statusBar = new PlanStatusBar();
   private readonly treeProvider = new PlanTreeProvider();
   private readonly debatePanel: DebatePanel;
@@ -56,6 +49,7 @@ export class PlanController implements vscode.Disposable {
   private readonly outputChannel = vscode.window.createOutputChannel("PlanMyProject");
   private readonly scanService: ScanService;
   private readonly consentService: ConsentService;
+  private readonly goalCommandService: GoalCommandService;
 
   private planUri: vscode.Uri | undefined;
   private plan: PlanDocument | undefined;
@@ -71,6 +65,7 @@ export class PlanController implements vscode.Disposable {
     this.repository = new PlanRepository(config.get<string>("planFileName", "planmyproject.md"));
     this.aiService = new AIService(context);
     this.taskGenerator = new TaskGenerator(this.aiService);
+    this.researchIndex = new ResearchIndex();
     this.debatePanel = new DebatePanel(context.extensionUri);
     this.debateService = new DebateService(this.aiService, async () => getGitUserName());
     this.scanService = new ScanService(
@@ -81,6 +76,15 @@ export class PlanController implements vscode.Disposable {
       () => this.plan?.goals ?? []
     );
     this.consentService = new ConsentService(() => this.getConfiguration());
+    this.goalCommandService = new GoalCommandService(
+      {
+        getPlan: () => this.plan,
+        ensureMutablePlan: (name) => this.ensureMutablePlan(name),
+        persistAndRefresh: () => this.persistAndRefresh(),
+        getConfiguration: () => this.getConfiguration()
+      },
+      new GoalSetupPanel()
+    );
   }
 
   async activate(): Promise<void> {
@@ -136,13 +140,13 @@ export class PlanController implements vscode.Disposable {
     register("planmyproject.refreshTree", async () => this.refreshPlanState());
     register("planmyproject.cancelActiveRequest", async () => this.cancelActiveRequest());
 
-    register("planmyproject.setProjectGoal", async () => this.setProjectGoal());
+    register("planmyproject.setProjectGoal", async () => this.goalCommandService.setProjectGoal());
     register("planmyproject.refreshScan", async () => this.refreshScan());
     register("planmyproject.debateTask", async (arg) => this.debateTask(arg));
     register("planmyproject.markResearchComplete", async (arg) => this.markResearchComplete(arg));
     register("planmyproject.showTaskRationale", async (arg) => this.showTaskRationale(arg));
     register("planmyproject.viewLinkedFiles", async (arg) => this.viewLinkedFiles(arg));
-    register("planmyproject.importGoalStatement", async () => this.importGoalStatement());
+    register("planmyproject.importGoalStatement", async () => this.goalCommandService.importGoalStatement());
     register("planmyproject.exportPlanSummary", async () => this.exportPlanSummary());
     register("planmyproject.viewResearchIndex", async () => this.viewResearchIndex());
     register("planmyproject.viewDebateArchive", async (arg) => this.viewDebateArchive(arg));
@@ -543,34 +547,6 @@ export class PlanController implements vscode.Disposable {
     void vscode.window.showInformationMessage("Cancelled active AI request.");
   }
 
-  private async setProjectGoal(): Promise<void> {
-    await this.ensureMutablePlan("Set Project Goal");
-    if (!this.plan) {
-      return;
-    }
-
-    const goal = await this.goalSetupPanel.promptForGoal(this.plan.goals);
-    if (!goal) {
-      return;
-    }
-
-    this.plan.goals.push(goal);
-    if (this.plan.rootTaskIds.length > 0) {
-      for (const rootId of this.plan.rootTaskIds) {
-        const task = this.plan.tasks[rootId];
-        if (task && !task.goalRef) {
-          task.goalRef = goal.id;
-        }
-      }
-    }
-
-    const starterCount = await this.maybeSuggestStarterRootTasks(goal);
-    await this.persistAndRefresh();
-    if (starterCount > 0) {
-      void vscode.window.showInformationMessage(`Added goal ${goal.id} with ${starterCount} starter root task(s).`);
-    }
-  }
-
   private async refreshScan(options?: { quiet?: boolean }): Promise<void> {
     if (!this.plan) {
       await this.refreshPlanState();
@@ -803,48 +779,6 @@ export class PlanController implements vscode.Disposable {
       const doc = await vscode.workspace.openTextDocument(uri);
       await vscode.window.showTextDocument(doc, { preview: false });
     }
-  }
-
-  private async importGoalStatement(): Promise<void> {
-    await this.ensureMutablePlan("Import Goal Statement");
-    if (!this.plan) {
-      return;
-    }
-
-    const files = await vscode.workspace.findFiles("*.md", "{**/node_modules/**,**/.git/**}", 50);
-    const picks = files
-      .map((uri) => ({
-        label: vscode.workspace.asRelativePath(uri, false),
-        uri
-      }))
-      .filter((item) => !item.label.toLowerCase().includes("planmyproject"));
-
-    if (picks.length === 0) {
-      void vscode.window.showWarningMessage("No markdown files available to import.");
-      return;
-    }
-
-    const selected = await vscode.window.showQuickPick(picks, { placeHolder: "Select goal statement markdown file" });
-    if (!selected) {
-      return;
-    }
-
-    const content = await readTextFile(selected.uri);
-    const goal = this.parseGoalFromMarkdown(content, this.plan.goals);
-    this.plan.goals.push(goal);
-    if (this.plan.rootTaskIds.length > 0) {
-      for (const rootTaskId of this.plan.rootTaskIds) {
-        const task = this.plan.tasks[rootTaskId];
-        if (task && !task.goalRef) {
-          task.goalRef = goal.id;
-        }
-      }
-    }
-
-    const starterCount = await this.maybeSuggestStarterRootTasks(goal);
-    await this.persistAndRefresh();
-    const starterSuffix = starterCount > 0 ? ` Added ${starterCount} starter root task(s).` : "";
-    void vscode.window.showInformationMessage(`Imported goal ${goal.id} from ${selected.label}.${starterSuffix}`);
   }
 
   private async exportPlanSummary(): Promise<void> {
@@ -1253,122 +1187,6 @@ export class PlanController implements vscode.Disposable {
     return selected?.value;
   }
 
-  private parseGoalFromMarkdown(content: string, existingGoals: ProjectGoal[]): ProjectGoal {
-    return parseGoalMarkdown(content, existingGoals);
-  }
-
-  private async maybeSuggestStarterRootTasks(goal: ProjectGoal): Promise<number> {
-    if (!this.plan || this.plan.rootTaskIds.length > 0) {
-      return 0;
-    }
-
-    const suggestions = this.buildStarterRootTaskSuggestions(goal);
-    if (suggestions.length === 0) {
-      return 0;
-    }
-
-    const selected = await vscode.window.showQuickPick(
-      suggestions.map((suggestion) => ({
-        label: suggestion.title,
-        description: taskTypeLabel(suggestion.type),
-        detail: suggestion.detail,
-        suggestion
-      })),
-      {
-        canPickMany: true,
-        title: "Suggested Starter Tasks",
-        placeHolder: "Select high-level tasks to add as root tasks"
-      }
-    );
-
-    if (!selected || selected.length === 0) {
-      return 0;
-    }
-
-    const createId = createTaskIdGenerator(this.plan);
-    const fileSendPolicy = this.getConfiguration().get<FileSendPolicy>("defaultTaskFileSendPolicy", "global");
-    const seenTitles = new Set<string>();
-    let createdCount = 0;
-
-    for (const item of selected) {
-      const key = normalizeTaskTitleKey(item.suggestion.title);
-      if (seenTitles.has(key)) {
-        continue;
-      }
-      seenTitles.add(key);
-
-      const task = createTaskNode({
-        id: createId(),
-        title: item.suggestion.title,
-        type: item.suggestion.type,
-        parentId: null,
-        origin: "manual",
-        goalRef: goal.id,
-        fileSendPolicy
-      });
-      addTask(this.plan, task);
-      createdCount += 1;
-    }
-
-    if (createdCount > 0) {
-      recomputeDerivedStatuses(this.plan);
-    }
-
-    return createdCount;
-  }
-
-  private buildStarterRootTaskSuggestions(goal: ProjectGoal): StarterTaskSuggestion[] {
-    const focus = toTaskPhrase(goal.statement, 72) || "the project";
-    const criteria = goal.successCriteria
-      .map((criterion) => toTaskPhrase(criterion, 72))
-      .filter((criterion): criterion is string => criterion.length > 0)
-      .slice(0, 3);
-
-    const suggestions: StarterTaskSuggestion[] = [
-      {
-        title: `Research architecture and technical risks for ${focus}`,
-        type: "research",
-        detail: "Identify unknowns before implementation."
-      },
-      {
-        title: `Decide core scope and system design for ${focus}`,
-        type: "decision",
-        detail: "Capture key product and technical tradeoffs."
-      },
-      {
-        title: `Implement the core user flow for ${focus}`,
-        type: "implementation",
-        detail: "Ship an end-to-end baseline flow."
-      },
-      {
-        title: "Validate delivery against goal success criteria",
-        type: "milestone",
-        detail: "Checkpoint before broad rollout."
-      }
-    ];
-
-    for (const criterion of criteria) {
-      suggestions.splice(2, 0, {
-        title: `Deliver success criterion: ${criterion}`,
-        type: "implementation",
-        detail: "Derived directly from the goal success criteria."
-      });
-    }
-
-    const deduped: StarterTaskSuggestion[] = [];
-    const seen = new Set<string>();
-    for (const suggestion of suggestions) {
-      const key = normalizeTaskTitleKey(suggestion.title);
-      if (!key || seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      deduped.push(suggestion);
-    }
-
-    return deduped.slice(0, 6);
-  }
-
   private buildPlanSummaryMarkdown(): string {
     if (!this.plan) {
       return "# Plan Summary\n\n(no plan loaded)\n";
@@ -1449,19 +1267,6 @@ export class PlanController implements vscode.Disposable {
   }
 }
 
-function taskTypeLabel(type: TaskType): string {
-  if (type === "research") {
-    return "Research";
-  }
-  if (type === "decision") {
-    return "Decision";
-  }
-  if (type === "milestone") {
-    return "Milestone";
-  }
-  return "Implementation";
-}
-
 function describeTaskBlockMessage(taskId: string, reason: TaskBlockReason): string {
   if (reason === "dependency") {
     return `Task ${taskId} is blocked by unresolved dependencies.`;
@@ -1472,17 +1277,3 @@ function describeTaskBlockMessage(taskId: string, reason: TaskBlockReason): stri
   return `Task ${taskId} is blocked until the debate thread is resolved.`;
 }
 
-function normalizeTaskTitleKey(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function toTaskPhrase(value: string, maxLength: number): string {
-  const cleaned = value
-    .replace(/\s+/g, " ")
-    .replace(/[.?!]+$/g, "")
-    .trim();
-  if (cleaned.length <= maxLength) {
-    return cleaned;
-  }
-  return `${cleaned.slice(0, Math.max(1, maxLength - 3)).trim()}...`;
-}
