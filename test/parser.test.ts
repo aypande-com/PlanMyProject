@@ -171,3 +171,25 @@ test("debate entries keep action metadata across serialize/parse", () => {
   assert.equal(parsedTask.debateLog.length, 2);
   assert.equal(parsedTask.debateLog[1].action, "rewrite");
 });
+
+test("debate entries with multiline content (lists) survive serialize/parse round-trip", () => {
+  const plan = createEmptyPlanDocument();
+  const task = createTaskNode({ id: "T0001", title: "Research architecture", type: "implementation" });
+  task.debateLog.push({
+    timestamp: "2026-03-29T12:00:00.000Z",
+    role: "ai",
+    content: "Key issues:\n\n- Concurrency model: OT vs CRDT\n- Networking: WebSocket vs WebRTC\n- Persistence: risk of lost updates"
+  });
+  addTask(plan, task);
+
+  const markdown = serializePlanMarkdown(plan, { researchGate: true, showRationaleInline: true });
+  // content should be on a single line with escaped newlines
+  assert.match(markdown, /\[ai\] Key issues:\\n\\n- Concurrency model/);
+
+  const parsed = parsePlanMarkdown(markdown);
+  const parsedTask = parsed.plan.tasks["T0001"];
+  assert.ok(parsedTask);
+  assert.equal(parsedTask.debateLog.length, 1);
+  assert.ok(parsedTask.debateLog[0].content.includes("- Concurrency model: OT vs CRDT"));
+  assert.ok(parsedTask.debateLog[0].content.includes("- Networking: WebSocket vs WebRTC"));
+});

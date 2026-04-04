@@ -465,7 +465,7 @@ function parseDebateLine(line: string): TaskNode["debateLog"][number] | undefine
     author: match[2],
     role: match[3] as "user" | "ai" | "system",
     action: match[4] ? (match[4] as NonNullable<TaskNode["debateLog"][number]["action"]>) : undefined,
-    content: match[5]
+    content: match[5].replace(/\\n/g, "\n")
   };
 }
 
@@ -491,7 +491,7 @@ function renderTask(lines: string[], plan: PlanDocument, taskId: string, depth: 
     for (const entry of task.debateLog) {
       const author = entry.author ? `[${entry.author}]` : "";
       const action = entry.action ? `[action:${entry.action}]` : "";
-      lines.push(`${indent}  [${entry.timestamp}]${author}[${entry.role}]${action} ${entry.content}`);
+      lines.push(`${indent}  [${entry.timestamp}]${author}[${entry.role}]${action} ${entry.content.replace(/\n/g, "\\n")}`);
     }
     lines.push(`${indent}  -->`);
   }
