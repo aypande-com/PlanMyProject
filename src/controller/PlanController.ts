@@ -1,36 +1,22 @@
-import * as path from "path";
 import * as vscode from "vscode";
 import {
-  addTask,
-  createTaskNode,
-  deleteTask,
-  getTaskBlockReason,
-  isResearchLikeTask,
-  markTaskStatus,
-  recomputeDerivedStatuses,
   type FileSendPolicy,
   type PlanDocument,
-  type TaskBlockReason,
-  type TaskNode,
-  type TaskType
+  type TaskNode
 } from "../model/index";
 import { parsePlanMarkdown, upgradeSchemaV1ToV2 } from "../parser";
 import { PlanRepository, findPlanUris, getGitUserName, getWorkspaceRootUri, hasOpenWorkspace, readTextFile, uriExists } from "../storage";
-import { buildImplementationPrompt, summarizeDraftTasks } from "../ai/PromptBuilder";
-import { parseImplementationResponse } from "../ai/ResponseParser";
 import { AIService } from "../ai/AIService";
 import { TaskGenerator } from "../generation";
 import { ResearchIndex } from "../research";
-import { DebateArchiver, DebatePanel, DebateService, type DebateAction } from "../debate";
-import { createTaskIdGenerator, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath } from "../util";
+import { DebateArchiver, DebatePanel, DebateService } from "../debate";
 import { GoalSetupPanel, PlanStatusBar, PlanTreeProvider } from "../ui";
 import { ScanService } from "../scanner/ScanService";
 import { ConsentService } from "../ai/ConsentService";
 import { GoalCommandService } from "./GoalCommandService";
+import { TaskCommandService, type TaskCommandContext, type TaskCommandServices } from "./TaskCommandService";
 
 const ACTIVE_REQUEST_CLEAR_MS = 2200;
-const MAX_LINKED_FILE_CONTENT_BYTES = 45_000;
-const MAX_LINKED_FILES_IN_PROMPT = 8;
 
 export interface TaskCommandRef {
   taskId?: string;
@@ -50,6 +36,7 @@ export class PlanController implements vscode.Disposable {
   private readonly scanService: ScanService;
   private readonly consentService: ConsentService;
   private readonly goalCommandService: GoalCommandService;
+  private readonly taskCommandService: TaskCommandService;
 
   private planUri: vscode.Uri | undefined;
   private plan: PlanDocument | undefined;
@@ -85,6 +72,29 @@ export class PlanController implements vscode.Disposable {
       },
       new GoalSetupPanel()
     );
+
+    const taskCtx: TaskCommandContext = {
+      getPlan: () => this.plan,
+      getPlanUri: () => this.planUri,
+      ensureMutablePlan: (name) => this.ensureMutablePlan(name),
+      persistAndRefresh: () => this.persistAndRefresh(),
+      refreshScan: (opts) => this.refreshScan(opts),
+      withActiveRequest: (id, runner) => this.withActiveRequest(id, runner),
+      buildWorkspaceSummary: () => this.buildWorkspaceSummary(),
+      resolveTaskFromArg: (arg) => this.resolveTaskFromArg(arg),
+      getConfiguration: () => this.getConfiguration()
+    };
+    const taskSvc: TaskCommandServices = {
+      aiService: this.aiService,
+      taskGenerator: this.taskGenerator,
+      researchIndex: this.researchIndex,
+      debatePanel: this.debatePanel,
+      debateService: this.debateService,
+      scanService: this.scanService,
+      consentService: this.consentService,
+      treeProvider: this.treeProvider
+    };
+    this.taskCommandService = new TaskCommandService(taskCtx, taskSvc);
   }
 
   async activate(): Promise<void> {
@@ -130,20 +140,20 @@ export class PlanController implements vscode.Disposable {
     };
 
     register("planmyproject.openPlan", async () => this.openPlan());
-    register("planmyproject.planTask", async (arg) => this.planTask(arg));
-    register("planmyproject.addTask", async (arg) => this.addTask(arg, false));
-    register("planmyproject.addRootTask", async () => this.addTask(undefined, true));
+    register("planmyproject.planTask", async (arg) => this.taskCommandService.planTask(arg));
+    register("planmyproject.addTask", async (arg) => this.taskCommandService.addTask(arg, false));
+    register("planmyproject.addRootTask", async () => this.taskCommandService.addTask(undefined, true));
     register("planmyproject.drillDown", async (arg) => this.drillDown(arg));
-    register("planmyproject.implementTask", async (arg) => this.implementTask(arg));
-    register("planmyproject.deleteTask", async (arg) => this.deleteTask(arg));
+    register("planmyproject.implementTask", async (arg) => this.taskCommandService.implementTask(arg));
+    register("planmyproject.deleteTask", async (arg) => this.taskCommandService.deleteTask(arg));
     register("planmyproject.rebuildQueue", async () => this.persistAndRefresh());
     register("planmyproject.refreshTree", async () => this.refreshPlanState());
     register("planmyproject.cancelActiveRequest", async () => this.cancelActiveRequest());
 
     register("planmyproject.setProjectGoal", async () => this.goalCommandService.setProjectGoal());
     register("planmyproject.refreshScan", async () => this.refreshScan());
-    register("planmyproject.debateTask", async (arg) => this.debateTask(arg));
-    register("planmyproject.markResearchComplete", async (arg) => this.markResearchComplete(arg));
+    register("planmyproject.debateTask", async (arg) => this.taskCommandService.debateTask(arg));
+    register("planmyproject.markResearchComplete", async (arg) => this.taskCommandService.markResearchComplete(arg));
     register("planmyproject.showTaskRationale", async (arg) => this.showTaskRationale(arg));
     register("planmyproject.viewLinkedFiles", async (arg) => this.viewLinkedFiles(arg));
     register("planmyproject.importGoalStatement", async () => this.goalCommandService.importGoalStatement());
@@ -259,42 +269,6 @@ export class PlanController implements vscode.Disposable {
     void vscode.commands.executeCommand("setContext", "planmyproject.treeEmpty", this.plan.rootTaskIds.length === 0);
   }
 
-  private async addTask(arg: unknown, forceRoot: boolean): Promise<void> {
-    await this.ensureMutablePlan("Add Task");
-    if (!this.plan || !this.planUri) {
-      return;
-    }
-
-    const type = await this.promptTaskType();
-    if (!type) {
-      return;
-    }
-
-    const title = await vscode.window.showInputBox({
-      prompt: forceRoot ? "Add root task" : "Add task",
-      placeHolder: "Describe the task"
-    });
-
-    if (!title?.trim()) {
-      return;
-    }
-
-    const parent = forceRoot ? undefined : this.resolveTaskFromArg(arg);
-    const createId = createTaskIdGenerator(this.plan);
-    const task = createTaskNode({
-      id: createId(),
-      title: title.trim(),
-      type,
-      parentId: parent?.id ?? null,
-      origin: "manual",
-      goalRef: parent?.goalRef ?? this.plan.goals[0]?.id ?? null,
-      fileSendPolicy: this.getConfiguration().get<FileSendPolicy>("defaultTaskFileSendPolicy", "global")
-    });
-
-    addTask(this.plan, task);
-    await this.persistAndRefresh();
-  }
-
   private async drillDown(arg: unknown): Promise<void> {
     if (!this.planUri || !this.plan) {
       await this.refreshPlanState();
@@ -314,225 +288,6 @@ export class PlanController implements vscode.Disposable {
     const position = new vscode.Position(line, 0);
     editor.selection = new vscode.Selection(position, position);
     editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
-  }
-
-  private async planTask(arg: unknown): Promise<void> {
-    await this.ensureMutablePlan("Plan Task");
-    if (!this.plan || !this.planUri) {
-      return;
-    }
-
-    const task = this.resolveTaskFromArg(arg);
-    if (!task) {
-      void vscode.window.showWarningMessage("No task selected. Place cursor on a task line or run from task context menu.");
-      return;
-    }
-
-    if (!(await this.consentService.requestConsent(`Plan task ${task.id}`, [
-      `Task: [${task.id}] ${task.title}`,
-      `Provider: ${this.aiService.getSelectedProvider()}`,
-      "Workspace scan summary and research index entries may be sent."
-    ]))) {
-      return;
-    }
-
-    const mode = await this.promptPlanningMode(task);
-    if (!mode) {
-      return;
-    }
-
-    if (!this.scanService.isFresh()) {
-      await this.refreshScan({ quiet: true });
-    }
-
-    const knowledge = await this.researchIndex.queryRelevant({
-      taskTitle: task.title,
-      goalStatement: this.plan.goals.find((goal) => goal.id === task.goalRef)?.statement,
-      topN: 5
-    });
-
-    await this.withActiveRequest(task.id, async (token) => {
-      const output = await this.taskGenerator.generate({
-        plan: this.plan as PlanDocument,
-        parent: task,
-        scan: this.scanService.getScan(),
-        knowledge,
-        confidenceThreshold: this.getConfiguration().get<number>("confidenceThreshold", 0.5),
-        includeSignatures: this.getConfiguration().get<boolean>("scanner.extractSignatures", true),
-        onChunk: async () => {
-          this.treeProvider.setRequestStatus({
-            taskId: task.id,
-            detail: "Streaming plan...",
-            state: "running"
-          });
-          if (token.isCancellationRequested) {
-            throw new Error("Cancelled");
-          }
-        }
-      });
-
-      let draftsToCommit = output.accepted;
-      if (output.requiresReview.length > 0) {
-        const decision = await vscode.window.showQuickPick(
-          [
-            { label: "Commit accepted tasks only", value: "accepted" as const },
-            { label: "Include low-confidence tasks", value: "all" as const },
-            { label: "Cancel", value: "cancel" as const }
-          ],
-          {
-            placeHolder: `${output.requiresReview.length} low-confidence task(s) generated. Choose commit strategy.`
-          }
-        );
-
-        if (!decision || decision.value === "cancel") {
-          throw new Error("Cancelled");
-        }
-
-        if (decision.value === "all") {
-          draftsToCommit = output.drafts;
-        }
-      }
-
-      if (mode === "replace") {
-        for (const childId of [...task.children]) {
-          deleteTask(this.plan as PlanDocument, childId);
-        }
-        task.children = [];
-      }
-
-      const materialized = this.taskGenerator.materializeDrafts(this.plan as PlanDocument, task, draftsToCommit);
-      for (const created of materialized) {
-        addTask(this.plan as PlanDocument, created);
-      }
-
-      // recomputeDerivedStatuses is called inside persistAndRefresh → serializePlanMarkdown,
-      // and the result is reflected back via parsePlanMarkdown. No separate call needed here.
-      await this.persistAndRefresh();
-
-      void vscode.window.showInformationMessage(
-        `Generated ${materialized.length} child task(s) for ${task.id}.\n${summarizeDraftTasks(draftsToCommit)}`
-      );
-    });
-  }
-
-  private async implementTask(arg: unknown): Promise<void> {
-    await this.ensureMutablePlan("Implement Task");
-    if (!this.plan || !this.planUri) {
-      return;
-    }
-
-    const task = this.resolveTaskFromArg(arg);
-    if (!task) {
-      void vscode.window.showWarningMessage("No task selected.");
-      return;
-    }
-    if (task.type !== "implementation") {
-      void vscode.window.showWarningMessage(`Task ${task.id} is ${task.type}. Only implementation tasks can run Implement Task.`);
-      return;
-    }
-
-    const researchGate = this.getConfiguration().get<boolean>("researchGate", true);
-    const blockReason = getTaskBlockReason(this.plan, task.id, researchGate);
-    if (blockReason) {
-      void vscode.window.showWarningMessage(describeTaskBlockMessage(task.id, blockReason));
-      return;
-    }
-
-    const ancestorChain = this.collectAncestorChain(task.id);
-    const conclusions = this.collectResearchConclusions(task);
-
-    const linkedSnapshots = await this.collectLinkedFileSnapshots(task);
-    const prompt = buildImplementationPrompt({
-      task,
-      ancestors: ancestorChain,
-      linkedFileSnapshots: linkedSnapshots,
-      researchConclusions: conclusions
-    });
-
-    if (!(await this.consentService.requestConsent(`Implement task ${task.id}`, [
-      `Task: [${task.id}] ${task.title}`,
-      `Provider: ${this.aiService.getSelectedProvider()}`,
-      `Linked files included: ${linkedSnapshots.length}`
-    ]))) {
-      return;
-    }
-
-    await this.withActiveRequest(task.id, async (token) => {
-      const response = await this.aiService.generateText(prompt, {
-        cancellationToken: token,
-        onChunk: async () => {
-          this.treeProvider.setRequestStatus({
-            taskId: task.id,
-            detail: "Receiving implementation...",
-            state: "running"
-          });
-        }
-      });
-
-      const parsed = parseImplementationResponse(response.text);
-
-      const sensitiveTargets = parsed.changes
-        .map((change) => change.path)
-        .filter((filePath) => isSensitiveWorkspacePath(filePath));
-
-      if (sensitiveTargets.length > 0) {
-        const approval = await vscode.window.showWarningMessage(
-          `AI output includes ${sensitiveTargets.length} sensitive file(s). Apply anyway?`,
-          { modal: true },
-          "Apply"
-        );
-        if (approval !== "Apply") {
-          throw new Error("Cancelled");
-        }
-      }
-
-      const shouldProceed = await this.confirmWriteToCompleteFiles(parsed.changes.map((change) => change.path));
-      if (!shouldProceed) {
-        throw new Error("Cancelled");
-      }
-
-      const root = getWorkspaceRootUri();
-      for (const change of parsed.changes) {
-        const targetPath = await resolveSafeTargetPath(root.fsPath, change.path);
-        const targetUri = vscode.Uri.file(targetPath);
-        await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(targetPath)));
-        await vscode.workspace.fs.writeFile(targetUri, Buffer.from(change.content, "utf8"));
-      }
-
-      markTaskStatus(this.plan as PlanDocument, task.id, parsed.taskCompleted ? "done" : "in-progress");
-      await this.persistAndRefresh();
-
-      if (this.getConfiguration().get<boolean>("autoRescanOnImplement", true)) {
-        await this.refreshScan({ quiet: true });
-      }
-
-      void vscode.window.showInformationMessage(`Implemented ${task.id}: wrote ${parsed.changes.length} file(s).`);
-    });
-  }
-
-  private async deleteTask(arg: unknown): Promise<void> {
-    await this.ensureMutablePlan("Delete Task");
-    if (!this.plan) {
-      return;
-    }
-
-    const task = this.resolveTaskFromArg(arg);
-    if (!task) {
-      return;
-    }
-
-    const approval = await vscode.window.showWarningMessage(
-      `Delete task ${task.id} and all descendants?`,
-      { modal: true },
-      "Delete"
-    );
-
-    if (approval !== "Delete") {
-      return;
-    }
-
-    deleteTask(this.plan, task.id);
-    await this.persistAndRefresh();
   }
 
   private async cancelActiveRequest(): Promise<void> {
@@ -576,150 +331,6 @@ export class PlanController implements vscode.Disposable {
     void vscode.window.showInformationMessage(
       `Signatures refreshed for ${task.id} (${linkedCount} linked file${linkedCount === 1 ? "" : "s"}).`
     );
-  }
-
-  private async debateTask(arg: unknown): Promise<void> {
-    await this.ensureMutablePlan("Debate Task");
-    if (!this.plan) {
-      return;
-    }
-
-    const task = this.resolveTaskFromArg(arg);
-    if (!task) {
-      return;
-    }
-
-    if (!this.scanService.isFresh()) {
-      await this.refreshScan({ quiet: true });
-    }
-
-    const summary = this.buildWorkspaceSummary();
-    this.debatePanel.show(task, summary, {
-      onUserMessage: async (message) => {
-        await this.debateService.appendEntry(task, { role: "user", content: message });
-        const response = await this.debateService.continueDebate(task, message, summary);
-        await this.debateService.appendEntry(task, { role: "ai", content: response.content });
-        this.debatePanel.postAssistantMessage(response.content);
-        await this.persistAndRefresh();
-      },
-      onAction: async (action) => {
-        await this.handleDebateAction(task, action, summary);
-      }
-    });
-
-    if (task.debateLog.length === 0) {
-      const opening = await this.debateService.generateOpening(task, summary);
-      await this.debateService.appendEntry(task, { role: "ai", content: opening.content });
-      this.debatePanel.postAssistantMessage(opening.content);
-      await this.persistAndRefresh();
-    }
-  }
-
-  private async handleDebateAction(task: TaskNode, action: DebateAction, workspaceSummary: string): Promise<void> {
-    if (!this.plan) {
-      return;
-    }
-
-    if (action === "rewrite") {
-      const nextTitle = await vscode.window.showInputBox({ prompt: `Rewrite title for ${task.id}`, value: task.title });
-      if (!nextTitle?.trim()) {
-        return;
-      }
-
-      const rewrittenRationale = await this.debateService.regenerateRationale(task, nextTitle, workspaceSummary);
-      const result = await this.debateService.applyAction(this.plan, task, action, {
-        rewriteTitle: nextTitle,
-        rewrittenRationale
-      });
-      if (result.changed) {
-        await this.persistAndRefresh();
-      }
-      void vscode.window.showInformationMessage(result.message);
-      return;
-    }
-
-    if (action === "split") {
-      // Ask intent first — only fire an AI call when the user explicitly requests suggestions.
-      const intentPick = await vscode.window.showQuickPick(
-        [
-          { label: "Get AI suggestions", value: "ai" as const },
-          { label: "Enter titles manually", value: "manual" as const }
-        ],
-        { placeHolder: `How would you like to split ${task.id}?` }
-      );
-      if (!intentPick) {
-        return;
-      }
-
-      let splitTitles: string[] = [];
-
-      if (intentPick.value === "ai") {
-        const suggestedTitles = await this.debateService.suggestSplitTitles(task, workspaceSummary);
-        if (suggestedTitles.length > 0) {
-          const picked = await vscode.window.showQuickPick(
-            suggestedTitles.map((title) => ({ label: title })),
-            { canPickMany: true, placeHolder: `Select split tasks for ${task.id}` }
-          );
-          if (!picked) {
-            return;
-          }
-          splitTitles = picked.map((item) => item.label);
-        }
-      }
-
-      if (splitTitles.length === 0) {
-        const titlesText = await vscode.window.showInputBox({
-          prompt: `Split ${task.id} into 2-4 tasks (comma-separated titles)`,
-          placeHolder: "Research API contract, Implement API handler, Add tests"
-        });
-        if (!titlesText?.trim()) {
-          return;
-        }
-        splitTitles = titlesText.split(",").map((value) => value.trim()).filter((value) => value.length > 0);
-      }
-
-      const result = await this.debateService.applyAction(this.plan, task, action, { splitTitles });
-      if (result.changed) {
-        await this.persistAndRefresh();
-      }
-      void vscode.window.showInformationMessage(result.message);
-      return;
-    }
-
-    const result = await this.debateService.applyAction(this.plan, task, action);
-    if (result.changed) {
-      await this.persistAndRefresh();
-    }
-    void vscode.window.showInformationMessage(result.message);
-  }
-
-  private async markResearchComplete(arg: unknown): Promise<void> {
-    await this.ensureMutablePlan("Mark Research Complete");
-    if (!this.plan) {
-      return;
-    }
-
-    const task = this.resolveTaskFromArg(arg);
-    if (!task || !isResearchLikeTask(task.type)) {
-      void vscode.window.showWarningMessage("Select a research or decision task to complete.");
-      return;
-    }
-
-    const conclusion = await vscode.window.showInputBox({
-      prompt: `Record your finding/decision for ${task.id}`,
-      placeHolder: "Decided: use pdfkit v4.0.2"
-    });
-
-    if (!conclusion?.trim()) {
-      return;
-    }
-
-    task.notes = conclusion.trim();
-    markTaskStatus(this.plan, task.id, "done");
-    await this.researchIndex.appendFromTask(task, conclusion.trim());
-
-    await this.persistAndRefresh();
-    void vscode.window.showInformationMessage(`✓ Research indexed: ${task.id}`);
   }
 
   private async showTaskRationale(arg: unknown): Promise<void> {
@@ -995,89 +606,6 @@ export class PlanController implements vscode.Disposable {
     return best;
   }
 
-  private collectAncestorChain(taskId: string): TaskNode[] {
-    if (!this.plan) {
-      return [];
-    }
-
-    const chain: TaskNode[] = [];
-    let current: TaskNode | undefined = this.plan.tasks[taskId];
-    while (current) {
-      chain.unshift(current);
-      current = current.parentId ? this.plan.tasks[current.parentId] : undefined;
-    }
-    return chain;
-  }
-
-  private collectResearchConclusions(task: TaskNode): string[] {
-    if (!this.plan) {
-      return [];
-    }
-
-    const result: string[] = [];
-    for (const depId of task.dependsOn) {
-      const dep = this.plan.tasks[depId];
-      if (dep && dep.status === "done" && dep.notes) {
-        result.push(`${dep.id}: ${dep.notes}`);
-      }
-    }
-
-    if (task.parentId) {
-      const parent = this.plan.tasks[task.parentId];
-      if (parent) {
-        for (const siblingId of parent.children) {
-          const sibling = this.plan.tasks[siblingId];
-          if (!sibling || sibling.id === task.id) {
-            continue;
-          }
-          if (isResearchLikeTask(sibling.type) && sibling.status === "done" && sibling.notes) {
-            result.push(`${sibling.id}: ${sibling.notes}`);
-          }
-        }
-      }
-    }
-
-    return result;
-  }
-
-  private async collectLinkedFileSnapshots(task: TaskNode): Promise<Array<{ path: string; content: string }>> {
-    const root = getWorkspaceRootUri();
-    const config = this.getConfiguration();
-    const resolvedPolicy = resolveFileSendPolicy(task.fileSendPolicy, config.get<boolean>("sendFileContentsToAI", false));
-
-    if (resolvedPolicy === "dont-send") {
-      return [];
-    }
-
-    if (resolvedPolicy === "ask") {
-      const approval = await vscode.window.showWarningMessage(
-        `Task ${task.id} is set to ask before sending linked file contents. Send linked files to AI?`,
-        "Send",
-        "Skip"
-      );
-      if (approval !== "Send") {
-        return [];
-      }
-    }
-
-    const snapshots: Array<{ path: string; content: string }> = [];
-    const paths = task.linkedFiles.slice(0, MAX_LINKED_FILES_IN_PROMPT);
-    for (const relativePath of paths) {
-      const uri = vscode.Uri.joinPath(root, ...relativePath.split("/"));
-      if (!(await uriExists(uri))) {
-        continue;
-      }
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      const content = Buffer.from(bytes).toString("utf8").slice(0, MAX_LINKED_FILE_CONTENT_BYTES);
-      snapshots.push({
-        path: relativePath,
-        content
-      });
-    }
-
-    return snapshots;
-  }
-
   private warnDebateConflicts(conflictedTaskIds: string[]): void {
     const newIds = conflictedTaskIds.filter((id) => !this.warnedDebateConflicts.has(id));
     if (newIds.length === 0) {
@@ -1091,38 +619,6 @@ export class PlanController implements vscode.Disposable {
     void vscode.window.showWarningMessage(
       `Debate log conflict${newIds.length > 1 ? "s" : ""} detected on: ${preview}${extra}. Please resolve in the plan file.`
     );
-  }
-
-  private async confirmWriteToCompleteFiles(paths: string[]): Promise<boolean> {
-    const scan = this.scanService.getScan();
-    if (!scan || paths.length === 0) {
-      return true;
-    }
-
-    const completeFiles = new Set(
-      scan.modules
-        .filter((module) => module.estimatedCompletion === "complete")
-        .flatMap((module) => module.files.map((file) => file.replace(/\\/g, "/").toLowerCase()))
-    );
-    if (completeFiles.size === 0) {
-      return true;
-    }
-
-    const overwrites = paths
-      .map((item) => item.replace(/\\/g, "/").toLowerCase())
-      .filter((item) => completeFiles.has(item));
-    if (overwrites.length === 0) {
-      return true;
-    }
-
-    const preview = overwrites.slice(0, 3).join(", ");
-    const extra = overwrites.length > 3 ? ` (+${overwrites.length - 3} more)` : "";
-    const decision = await vscode.window.showWarningMessage(
-      `AI output will overwrite ${overwrites.length} file(s) currently marked complete by scan: ${preview}${extra}. Continue?`,
-      { modal: true },
-      "Apply"
-    );
-    return decision === "Apply";
   }
 
   private async withActiveRequest(taskId: string, runner: (token: vscode.CancellationToken) => Promise<void>): Promise<void> {
@@ -1156,35 +652,6 @@ export class PlanController implements vscode.Disposable {
       source.dispose();
       this.statusBar.setActiveRequest(false);
     }
-  }
-
-  private async promptTaskType(): Promise<TaskType | undefined> {
-    const selected = await vscode.window.showQuickPick(
-      [
-        { label: "Implementation", value: "implementation" as const },
-        { label: "Research", value: "research" as const },
-        { label: "Decision", value: "decision" as const },
-        { label: "Milestone", value: "milestone" as const }
-      ],
-      { placeHolder: "Select task type" }
-    );
-
-    return selected?.value;
-  }
-
-  private async promptPlanningMode(task: TaskNode): Promise<"replace" | "refine" | undefined> {
-    if (task.children.length === 0) {
-      return "replace";
-    }
-
-    const selected = await vscode.window.showQuickPick(
-      [
-        { label: "Refine existing children", value: "refine" as const },
-        { label: "Replace existing children", value: "replace" as const }
-      ],
-      { placeHolder: `Task ${task.id} already has children.` }
-    );
-    return selected?.value;
   }
 
   private buildPlanSummaryMarkdown(): string {
@@ -1265,15 +732,5 @@ export class PlanController implements vscode.Disposable {
     }
     return "Unknown error.";
   }
-}
-
-function describeTaskBlockMessage(taskId: string, reason: TaskBlockReason): string {
-  if (reason === "dependency") {
-    return `Task ${taskId} is blocked by unresolved dependencies.`;
-  }
-  if (reason === "research-gate") {
-    return `Task ${taskId} is blocked by unresolved sibling research or decision tasks.`;
-  }
-  return `Task ${taskId} is blocked until the debate thread is resolved.`;
 }
 
