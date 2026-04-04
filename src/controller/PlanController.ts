@@ -44,6 +44,8 @@ export class PlanController implements vscode.Disposable {
   private activeRequest: vscode.CancellationTokenSource | undefined;
   private readonly warnedDebateConflicts = new Set<string>();
   private isSelfWriting = false;
+  private readonly undoStack: string[] = [];
+  private static readonly UNDO_STACK_MAX = 10;
 
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -162,6 +164,7 @@ export class PlanController implements vscode.Disposable {
     register("planmyproject.viewDebateArchive", async (arg) => this.viewDebateArchive(arg));
     register("planmyproject.setTaskFileSendPolicy", async (arg) => this.setTaskFileSendPolicy(arg));
     register("planmyproject.scanTask", async (arg) => this.scanTask(arg));
+    register("planmyproject.undoLastChange", async () => this.undoLastChange());
   }
 
   private registerWatchers(): void {
@@ -490,6 +493,10 @@ export class PlanController implements vscode.Disposable {
       return;
     }
 
+    // Snapshot current file content before overwriting (for undo).
+    const currentContent = await readTextFile(this.planUri);
+    pushUndoEntry(this.undoStack, currentContent, PlanController.UNDO_STACK_MAX);
+
     const config = this.getConfiguration();
     this.isSelfWriting = true;
     let serialized: string;
@@ -507,6 +514,24 @@ export class PlanController implements vscode.Disposable {
 
     await this.maybeArchiveDebateEntries();
     this.render();
+  }
+
+  private async undoLastChange(): Promise<void> {
+    if (!this.planUri || this.undoStack.length === 0) {
+      void vscode.window.showInformationMessage("Nothing to undo.");
+      return;
+    }
+
+    const previous = this.undoStack.pop()!;
+    this.isSelfWriting = true;
+    try {
+      await vscode.workspace.fs.writeFile(this.planUri, Buffer.from(previous, "utf8"));
+    } finally {
+      this.isSelfWriting = false;
+    }
+
+    await this.refreshPlanState();
+    void vscode.window.showInformationMessage("Undo: reverted to previous plan state.");
   }
 
   private async maybeArchiveDebateEntries(): Promise<void> {
@@ -734,3 +759,18 @@ export class PlanController implements vscode.Disposable {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Module-level helpers (exported for testability)
+// ---------------------------------------------------------------------------
+
+/**
+ * Pushes `entry` onto `stack` and trims it to `maxSize` by removing
+ * the oldest entries. Mutates the array in place and returns it.
+ */
+export function pushUndoEntry(stack: string[], entry: string, maxSize: number): string[] {
+  stack.push(entry);
+  while (stack.length > maxSize) {
+    stack.shift();
+  }
+  return stack;
+}
