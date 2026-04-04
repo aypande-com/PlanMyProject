@@ -152,6 +152,10 @@ export class PlanController implements vscode.Disposable {
   private registerWatchers(): void {
     const planFileName = this.getConfiguration().get<string>("planFileName", "planmyproject.md");
     const watcher = vscode.workspace.createFileSystemWatcher(`**/${planFileName}`);
+    // Note: onDidChangeActiveTextEditor is intentionally NOT subscribed here.
+    // The plan stays current via the file-system watcher (onDidChange/Create/Delete)
+    // and the onDidSaveTextDocument handler below. Switching editor tabs must not
+    // trigger a re-parse — it causes redundant I/O and interferes with streaming.
     this.context.subscriptions.push(
       watcher,
       watcher.onDidCreate(async () => this.refreshPlanState()),
