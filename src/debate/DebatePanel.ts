@@ -69,6 +69,10 @@ function renderDebateHtml(task: TaskNode, workspaceSummary: string): string {
     }))
   ).replace(/</g, "\\u003c");
 
+  const archiveNotice = task.archivedDebatePath
+    ? `<div class="archive-notice">📁 Earlier entries archived — <code>${escapeHtml(task.archivedDebatePath)}</code></div>`
+    : "";
+
   return `<!doctype html>
 <html>
 <head>
@@ -78,6 +82,7 @@ function renderDebateHtml(task: TaskNode, workspaceSummary: string): string {
     .meta { opacity: 0.85; font-size: 12px; margin-bottom: 10px; }
     .summary { white-space: pre-wrap; border: 1px solid var(--vscode-panel-border); padding: 8px; border-radius: 6px; margin-bottom: 10px; }
     .rationale { white-space: pre-wrap; border-left: 3px solid var(--vscode-textLink-foreground); padding: 6px 8px; margin-bottom: 10px; opacity: 0.95; }
+    .archive-notice { font-size: 12px; opacity: 0.8; border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; }
     #log { border: 1px solid var(--vscode-panel-border); border-radius: 6px; min-height: 180px; padding: 8px; margin-bottom: 10px; overflow: auto; }
     .entry { margin-bottom: 8px; white-space: pre-wrap; }
     textarea { width: 100%; min-height: 74px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 6px; }
@@ -91,6 +96,7 @@ function renderDebateHtml(task: TaskNode, workspaceSummary: string): string {
   <div class="meta">Goal: ${escapeHtml(task.goalRef ?? "none")} | Confidence: ${task.confidence !== null ? `${Math.round(task.confidence * 100)}%` : "n/a"}</div>
   <div class="rationale"><strong>Rationale:</strong> ${escapedRationale}</div>
   <div class="summary">${escapedSummary}</div>
+  ${archiveNotice}
   <div id="log"></div>
   <textarea id="message" placeholder="Challenge, refine, or clarify this task with PlanBot..."></textarea>
   <div class="actions">

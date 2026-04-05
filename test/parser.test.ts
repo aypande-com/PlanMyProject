@@ -172,6 +172,32 @@ test("debate entries keep action metadata across serialize/parse", () => {
   assert.equal(parsedTask.debateLog[1].action, "rewrite");
 });
 
+test("archivedDebatePath survives serialize/parse round-trip", () => {
+  const plan = createEmptyPlanDocument();
+  const task = createTaskNode({ id: "T0001", title: "Evaluate options", type: "research" });
+  task.archivedDebatePath = ".pmp/debate-archive/T0001.md";
+  addTask(plan, task);
+
+  const markdown = serializePlanMarkdown(plan, { researchGate: true, showRationaleInline: true });
+  assert.match(markdown, /archivedDebatePath=\.pmp\/debate-archive\/T0001\.md/);
+
+  const parsed = parsePlanMarkdown(markdown);
+  assert.equal(parsed.plan.tasks["T0001"]?.archivedDebatePath, ".pmp/debate-archive/T0001.md");
+});
+
+test("null archivedDebatePath round-trips as null", () => {
+  const plan = createEmptyPlanDocument();
+  const task = createTaskNode({ id: "T0001", title: "Evaluate options", type: "research" });
+  task.archivedDebatePath = null;
+  addTask(plan, task);
+
+  const markdown = serializePlanMarkdown(plan, { researchGate: true, showRationaleInline: true });
+  assert.match(markdown, /archivedDebatePath=null/);
+
+  const parsed = parsePlanMarkdown(markdown);
+  assert.equal(parsed.plan.tasks["T0001"]?.archivedDebatePath, null);
+});
+
 test("debate entries with multiline content (lists) survive serialize/parse round-trip", () => {
   const plan = createEmptyPlanDocument();
   const task = createTaskNode({ id: "T0001", title: "Research architecture", type: "implementation" });

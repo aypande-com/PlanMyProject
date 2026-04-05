@@ -351,6 +351,8 @@ function applyTaskMetadata(task: TaskNode, metadata: Record<string, string>): vo
   if (createdAt) {
     task.createdAt = createdAt;
   }
+
+  task.archivedDebatePath = normalizeNullableString(metadata.archivedDebatePath);
 }
 
 function parseInlineMetadata(raw: string): Record<string, string> {
@@ -479,7 +481,7 @@ function renderTask(lines: string[], plan: PlanDocument, taskId: string, depth: 
   const symbol = taskStatusToSymbol(task.status);
   lines.push(`${indent}- [${symbol}] [${task.id}] ${TASK_TYPE_ICONS[task.type]} ${task.title}`);
   lines.push(
-    `${indent}  <!-- pmp:id=${task.id};parent=${task.parentId ?? "ROOT"};type=${task.type};origin=${task.origin};goalRef=${task.goalRef ?? "null"};confidence=${task.confidence ?? "null"};dependsOn=${JSON.stringify(task.dependsOn)};linkedFiles=${JSON.stringify(task.linkedFiles)};fileSendPolicy=${task.fileSendPolicy};createdAt=${task.createdAt};completedAt=${task.completedAt ?? "null"};notes=${escapeInlineValue(task.notes ?? "null")} -->`
+    `${indent}  <!-- pmp:id=${task.id};parent=${task.parentId ?? "ROOT"};type=${task.type};origin=${task.origin};goalRef=${task.goalRef ?? "null"};confidence=${task.confidence ?? "null"};dependsOn=${JSON.stringify(task.dependsOn)};linkedFiles=${JSON.stringify(task.linkedFiles)};fileSendPolicy=${task.fileSendPolicy};createdAt=${task.createdAt};completedAt=${task.completedAt ?? "null"};notes=${escapeInlineValue(task.notes ?? "null")};archivedDebatePath=${task.archivedDebatePath ?? "null"} -->`
   );
 
   if (includeRationale && task.rationale) {
