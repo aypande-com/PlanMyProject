@@ -1,3 +1,4 @@
+import { ApiKeyError, isAuthStatus } from "./ApiKeyError";
 import type { AIProvider, AIStreamOptions, AITextResponse } from "./types";
 
 export class ClaudeProvider implements AIProvider {
@@ -32,6 +33,11 @@ export class ClaudeProvider implements AIProvider {
 
     if (!response.ok) {
       const details = await safeText(response);
+      if (isAuthStatus(response.status)) {
+        throw new ApiKeyError("claude",
+          `Claude API key is invalid or expired (${response.status}). ` +
+          `Use "PlanMyProject: Set API Key" to update it.`);
+      }
       throw new Error(`Claude request failed (${response.status}): ${details}`);
     }
 

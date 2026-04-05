@@ -165,6 +165,7 @@ export class PlanController implements vscode.Disposable {
     register("planmyproject.setTaskFileSendPolicy", async (arg) => this.setTaskFileSendPolicy(arg));
     register("planmyproject.scanTask", async (arg) => this.scanTask(arg));
     register("planmyproject.undoLastChange", async () => this.undoLastChange());
+    register("planmyproject.setApiKey", async () => this.promptSetApiKey());
   }
 
   private registerWatchers(): void {
@@ -743,6 +744,30 @@ export class PlanController implements vscode.Disposable {
     }
 
     return summaryLines.join("\n");
+  }
+
+  private async promptSetApiKey(): Promise<void> {
+    const providerChoice = await vscode.window.showQuickPick(
+      [
+        { label: "Claude (Anthropic)", value: "claude" as const },
+        { label: "OpenAI",             value: "openai" as const }
+      ],
+      { placeHolder: "Which provider's key do you want to set?" }
+    );
+    if (!providerChoice) { return; }
+
+    const key = await vscode.window.showInputBox({
+      prompt: `Enter your ${providerChoice.label} API key`,
+      password: true,
+      ignoreFocusOut: true,
+      validateInput: (v) => v?.trim() ? undefined : "Key cannot be empty"
+    });
+    if (!key) { return; }
+
+    await this.aiService.setApiKey(providerChoice.value, key.trim());
+    void vscode.window.showInformationMessage(
+      `${providerChoice.label} API key saved to Secret Storage.`
+    );
   }
 
   private getConfiguration(): vscode.WorkspaceConfiguration {

@@ -1,7 +1,7 @@
 # PlanMyProject v2 — Feature Progress Report
 
 **As of April 5, 2026**  
-**Validated against:** current code in `src/` + `npm run compile` + `npm test`
+**Validated against:** current code in `src/` + `npm run compile` + `npm test` + static code analysis
 
 ---
 
@@ -110,6 +110,8 @@
 | Prompt masking (tokens/secrets) | ✅ Complete | Implemented |
 | Session consent persistence | ✅ Complete | Implemented via `workspaceState` |
 | Extension state for active debate draft input | ❌ Missing | Not persisted — draft lost on panel close |
+| API key VCS exposure warning | ❌ Missing | Keys found in `settings.json` are silently migrated to secrets with no user warning — risk of git commit exposure (S1) |
+| API error response sanitization | ❌ Missing | Raw API error bodies (up to 400 chars) shown in error toasts — could echo key fragments via proxy errors (S2) |
 
 ### 8) Partial Codebase Awareness
 
@@ -127,6 +129,17 @@
 | Integration workflows from spec | ❌ Missing | Spec-listed scenarios (scan→generate→queue, research→index→prompt, debate lifecycle) not automated |
 | Feature coverage >=95% gate | ❌ Missing | Not measured/reported; no merge gate enforcing it |
 
+### 10) Code Quality
+
+| Area | Status | Notes |
+|---|---|---|
+| Async error handling in file watcher callbacks | ❌ Missing | `onDidCreate/Change/Delete` and `onDidSaveTextDocument` callbacks propagate rejections silently (C3) |
+| Dependency cycle detection feedback | 🟡 Partial | Cycle is detected and handled; user receives no warning (C4) |
+| `max_tokens` constant in `ClaudeProvider` | ❌ Missing | Hardcoded magic number `1800` inline; no named constant (C1) |
+| `any` return type on `selectCopilotModel` | ❌ Missing | Untyped return propagates into call sites, removing IDE safety (C2) |
+| Archive failure logging | ❌ Missing | `maybeArchiveDebateEntries` swallows errors silently; output channel not notified (A2) |
+| `queue.sort()` inside dependency-walk loop | ❌ Missing | Re-sorts full queue on every insertion — O(n³) in the worst case for large plans (C5) |
+
 ---
 
 ## Updated Bottom Line
@@ -134,12 +147,14 @@
 - Architecture is now significantly cleaner: four services extracted from `PlanController` (ScanService, ConsentService, GoalCommandService, TaskCommandService), each independently testable.
 - Undo stack provides reversibility for plan mutations, closing a §8 autonomy constraint from the constitution.
 - Test coverage expanded from ~30 tests to 58 across 11 suites; all passing.
+- Static code analysis (April 5) surfaced 2 security issues (S1 high, S2 low) and 6 code-quality issues (C1–C5, A2) — no critical blockers; all captured as P4-H tasks.
 - Remaining work concentrated in:
   1. Partial-codebase onboarding wizard (A/B/C UX)
   2. `pmp:debate-archive` block serialization in plan file
   3. Debate draft input persistence across panel close
   4. Debate panel streaming
   5. Integration test harness + acceptance gating
+  6. API key VCS exposure warning + error response sanitization (security)
 
 ---
 
@@ -251,3 +266,53 @@ There is no automated check that new code maintains spec alignment. The `>=95%` 
 - Exit non-zero if any listed test is missing or failing
 - Add `npm run check:coverage` to the CI pipeline in `.github/workflows/` (or equivalent)
 - Seed `FEATURE_CHECKLIST.json` from the ✅ items in this document's "Current Status" tables
+
+---
+
+### P4-H — Code Quality & Security
+
+*Findings from static code analysis performed April 5, 2026.*
+
+**P4-H1 — Warn when API key found in `settings.json` (S1 · High)**  
+`AIService.getApiKey()` ([src/ai/AIService.ts:49](src/ai/AIService.ts#L49)) silently reads from workspace configuration and migrates the value into `context.secrets` with no user-visible warning. A key committed to `settings.json` is already in VCS before this code runs.  
+- In `getApiKey()`, after detecting `normalizedSetting`, call `vscode.window.showWarningMessage()` explaining that the key was found in `settings.json` and may be at risk of VCS exposure
+- Suggest the user remove the key from settings and re-enter it via the "Set API Key" command
+- Add a "Don't warn again" option stored in `context.globalState` to suppress repeat alerts
+
+**P4-H2 — Sanitize API error response bodies before surfacing (S2 · Low)**  
+`safeText()` in [src/ai/ClaudeProvider.ts:61](src/ai/ClaudeProvider.ts#L61) and [src/ai/OpenAIProvider.ts:113](src/ai/OpenAIProvider.ts#L113) returns up to 400 chars of raw response text in thrown errors. Proxy or gateway errors can echo authorization headers or key fragments.  
+- Strip bearer token and x-api-key patterns from the extracted text before including in the error message:
+  ```typescript
+  return (await response.text()).slice(0, 400)
+    .replace(/\b(sk-[A-Za-z0-9\-_]{10,}|ant[\w\-]{10,}|Bearer\s+\S+)\b/gi, "[REDACTED]");
+  ```
+
+**P4-H3 — Handle async rejections in file watcher callbacks (C3 · Medium)**  
+`watcher.onDidCreate/Change/Delete` and `onDidSaveTextDocument` in [src/controller/PlanController.ts:179](src/controller/PlanController.ts#L179) are async callbacks. Unhandled rejections from `refreshPlanState()` are silently swallowed — the watcher stops responding with no user feedback.  
+- Wrap each async callback body in `try/catch`
+- On catch, append the error to the extension output channel and optionally show a status bar warning
+
+**P4-H4 — Surface dependency cycle detection to the user (C4 · Medium)**  
+`sortLeavesByDependencies` in [src/queue/QueueBuilder.ts:114](src/queue/QueueBuilder.ts#L114) detects cycles (when `output.length !== leaves.length`) but silently appends the affected tasks to the queue with no notification.  
+- After the topological sort, if `output.length !== leaves.length`, collect the remaining task IDs
+- Return the cycle list alongside `QueueSections` (add optional `detectedCycles?: string[]` field) or log a warning via the output channel
+- In `PlanController`, surface this as a one-time informational notification per session
+
+**P4-H5 — Extract `max_tokens` as a named constant in `ClaudeProvider` (C1 · Low)**  
+`max_tokens: 1800` is an inline magic number in [src/ai/ClaudeProvider.ts:25](src/ai/ClaudeProvider.ts#L25). If output is being truncated by the provider, there is no obvious place to adjust it.  
+- Define `const MAX_RESPONSE_TOKENS = 1800;` at the top of `ClaudeProvider.ts`
+- Replace the inline literal with the constant
+
+**P4-H6 — Narrow `any` return type on `selectCopilotModel` (C2 · Low)**  
+`selectCopilotModel()` in [src/ai/CopilotProvider.ts:32](src/ai/CopilotProvider.ts#L32) returns `Promise<any>`, propagating `any` into `model.id` and `model.sendRequest` call sites.  
+- Define an inline interface `CopilotModel` with the minimal surface used (`id?: string`, `sendRequest(...)`)
+- Change the return type to `Promise<CopilotModel>`
+
+**P4-H7 — Log archive failures to output channel (A2 · Low)**  
+The empty `catch` in `maybeArchiveDebateEntries` ([src/controller/PlanController.ts:551](src/controller/PlanController.ts#L551)) is intentional ("best-effort") but gives no visibility when archiving silently fails.  
+- Inside the catch block, append a line to the extension output channel:
+  ```typescript
+  } catch (err) {
+    this.outputChannel.appendLine(`[PlanController] Debate archive failed for ${task.id}: ${err}`);
+  }
+  ```

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { maskPromptText } from "../util";
+import { ApiKeyError } from "./ApiKeyError";
 import { ClaudeProvider } from "./ClaudeProvider";
 import { CopilotProvider } from "./CopilotProvider";
 import { OpenAIProvider } from "./OpenAIProvider";
@@ -20,7 +21,14 @@ export class AIService {
       maskEmails: false,
       maskIpAddresses: false
     });
-    return provider.generate(maskedPrompt, options);
+    try {
+      return await provider.generate(maskedPrompt, options);
+    } catch (err) {
+      if (err instanceof ApiKeyError) {
+        await this.handleExpiredKey(err.provider);
+      }
+      throw err;
+    }
   }
 
   getSelectedProvider(): AIProviderId {
@@ -57,6 +65,7 @@ export class AIService {
       if (normalizedSetting !== normalizedSecret) {
         await this.context.secrets.store(secretName, normalizedSetting);
       }
+      await this.warnApiKeyInSettings(provider);
       return normalizedSetting;
     }
 
@@ -65,6 +74,55 @@ export class AIService {
     }
 
     return undefined;
+  }
+
+  private async handleExpiredKey(provider: "claude" | "openai"): Promise<void> {
+    // Clear stale cached provider so next call re-resolves with the new key.
+    if (provider === "claude") {
+      this.cachedClaudeProvider = undefined;
+    } else {
+      this.cachedOpenAiProvider = undefined;
+    }
+
+    // Remove the dead key from secret storage.
+    const secretName = provider === "claude"
+      ? "planmyproject.claudeApiKey"
+      : "planmyproject.openaiApiKey";
+    await this.context.secrets.delete(secretName);
+
+    const choice = await vscode.window.showErrorMessage(
+      `PlanMyProject: Your ${provider} API key is no longer valid (expired or revoked). ` +
+      `The stored key has been cleared.`,
+      "Set New Key",
+      "Dismiss"
+    );
+    if (choice === "Set New Key") {
+      vscode.commands.executeCommand("planmyproject.setApiKey");
+    }
+  }
+
+  private async warnApiKeyInSettings(provider: "claude" | "openai"): Promise<void> {
+    const suppressKey = `pmp.suppressApiKeySettingsWarning.${provider}`;
+    if (this.context.globalState.get<boolean>(suppressKey)) { return; }
+
+    const settingName = provider === "claude" ? "claudeApiKey" : "openaiApiKey";
+    const choice = await vscode.window.showWarningMessage(
+      `PlanMyProject: Your ${provider} API key is stored in settings.json ` +
+      `(planmyproject.${settingName}). If this file is committed to VCS, your key is exposed. ` +
+      `Remove the setting and use "PlanMyProject: Set API Key" to store it securely instead.`,
+      "Open Settings",
+      "Set API Key Now",
+      "Don't Show Again"
+    );
+
+    if (choice === "Open Settings") {
+      vscode.commands.executeCommand("workbench.action.openSettings",
+        `planmyproject.${settingName}`);
+    } else if (choice === "Set API Key Now") {
+      vscode.commands.executeCommand("planmyproject.setApiKey");
+    } else if (choice === "Don't Show Again") {
+      await this.context.globalState.update(suppressKey, true);
+    }
   }
 
   private async resolveProvider(override?: AIProviderId): Promise<AIProvider> {

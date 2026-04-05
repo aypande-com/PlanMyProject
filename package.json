@@ -199,6 +199,11 @@
         "command": "planmyproject.undoLastChange",
         "title": "Undo Last Change",
         "category": "PlanMyProject"
+      },
+      {
+        "command": "planmyproject.setApiKey",
+        "title": "Set API Key",
+        "category": "PlanMyProject"
       }
     ],
     "keybindings": [
@@ -329,12 +334,14 @@
         "planmyproject.claudeApiKey": {
           "type": "string",
           "default": "",
-          "description": "Anthropic Claude API key. Stored in VS Code Secret Storage after first use."
+          "markdownDeprecationMessage": "**Deprecated.** Storing API keys in settings risks VCS exposure. Use the **PlanMyProject: Set API Key** command instead.",
+          "description": "Anthropic Claude API key. Use 'PlanMyProject: Set API Key' command for secure storage."
         },
         "planmyproject.openaiApiKey": {
           "type": "string",
           "default": "",
-          "description": "OpenAI API key. Stored in VS Code Secret Storage after first use."
+          "markdownDeprecationMessage": "**Deprecated.** Storing API keys in settings risks VCS exposure. Use the **PlanMyProject: Set API Key** command instead.",
+          "description": "OpenAI API key. Use 'PlanMyProject: Set API Key' command for secure storage."
         },
         "planmyproject.sendFileContentsToAI": {
           "type": "boolean",
