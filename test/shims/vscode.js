@@ -53,8 +53,37 @@ class Uri {
   }
 }
 
+class Position {
+  constructor(line, character) {
+    this.line = line;
+    this.character = character;
+  }
+}
+
+class Range {
+  constructor(startLineOrPosition, startCharacter, endLine, endCharacter) {
+    if (typeof startLineOrPosition === "number") {
+      this.start = new Position(startLineOrPosition, startCharacter);
+      this.end = new Position(endLine, endCharacter);
+    } else {
+      this.start = startLineOrPosition;
+      this.end = startCharacter;
+    }
+  }
+}
+
+class CodeLens {
+  constructor(range, command) {
+    this.range = range;
+    this.command = command;
+  }
+}
+
 module.exports = {
+  CodeLens,
   EventEmitter,
+  Position,
+  Range,
   ThemeIcon,
   TreeItem,
   TreeItemCollapsibleState,

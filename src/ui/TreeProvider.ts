@@ -30,6 +30,16 @@ class WorkspaceSnapshotItem extends vscode.TreeItem {
   }
 }
 
+class V1ReadOnlyBannerItem extends vscode.TreeItem {
+  constructor() {
+    super("Read-only — v1 plan (migration required)", vscode.TreeItemCollapsibleState.None);
+    this.description = "Commands disabled until migrated to v2";
+    this.tooltip = "This plan uses the v1 schema. Run Open Plan to be prompted for migration.";
+    this.iconPath = new vscode.ThemeIcon("lock");
+    this.contextValue = "v1ReadOnlyBanner";
+  }
+}
+
 class TaskTreeItem extends vscode.TreeItem {
   constructor(
     readonly task: TaskNode,
@@ -143,6 +153,9 @@ export class PlanTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem
 
     if (!element) {
       const roots: vscode.TreeItem[] = [new WorkspaceSnapshotItem(this.scan)];
+      if (this.plan.schemaVersion === "v1") {
+        roots.push(new V1ReadOnlyBannerItem());
+      }
       for (const rootId of this.plan.rootTaskIds) {
         const task = this.plan.tasks[rootId];
         if (!task) {

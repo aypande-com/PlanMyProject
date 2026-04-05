@@ -270,6 +270,7 @@ export class PlanController implements vscode.Disposable {
 
     void vscode.commands.executeCommand("setContext", "planmyproject.workspaceOpen", hasOpenWorkspace());
     void vscode.commands.executeCommand("setContext", "planmyproject.treeEmpty", this.plan.rootTaskIds.length === 0);
+    void vscode.commands.executeCommand("setContext", "planmyproject.schemaV1", this.plan.schemaVersion === "v1");
   }
 
   private async drillDown(arg: unknown): Promise<void> {
