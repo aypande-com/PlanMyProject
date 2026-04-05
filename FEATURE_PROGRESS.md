@@ -1,7 +1,7 @@
 # PlanMyProject v2 — Feature Progress Report
 
-**As of March 19, 2026**  
-**Validated against:** `PlanMyProject_v2_Spec.md` + current code in `src/` + `npm run compile` + `npm test`
+**As of April 5, 2026**  
+**Validated against:** current code in `src/` + `npm run compile` + `npm test`
 
 ---
 
@@ -9,32 +9,27 @@
 
 | Metric | Status |
 |---|---|
-| Build/Test Health | ✅ `compile` and all 6 test suites passing |
+| Build/Test Health | ✅ `compile` clean; 58 tests across 11 suites — all passing |
 | Delivery Model | ✅ Big-bang rewrite branch structure present |
-| Overall Spec Alignment | 🟡 ~78% implemented / wired |
-| Major Risk | Spec tracker previously overstated several sections as fully complete |
+| Overall Spec Alignment | 🟡 ~85% implemented / wired |
+| Architecture Health | ✅ Major P3 refactor complete — PlanController decomposed into services |
 
 ---
 
-## Implemented in This Validation Pass
+## Implemented Since Last Report (March 19 → April 5, 2026)
 
-The following missing behaviors were implemented now:
+### P3 Architecture Refactor
+1. `ScanService` extracted from `PlanController` — scan orchestration isolated (P3-C1)
+2. `ConsentService` extracted from `PlanController` — AI consent logic isolated (P3-C2)
+3. `TaskCommandService` extracted from `PlanController` — task command handlers isolated (P3-C3)
+4. `GoalCommandService` extracted from `PlanController` — goal command handlers isolated (P3-C4)
+5. Lightweight undo stack added to `PlanController` — reversible plan mutations (P3-C5)
 
-1. `Open Plan` now auto-runs scan when no scan cache exists.
-2. Scanner now reads both `.gitignore` and `.pmpignore` patterns.
-3. `.gitignore` suggestion flow added for `.pmp/scan-cache.json`.
-4. Workspace state now persists:
-   - AI session "Allow All" consent
-   - last scan timestamp
-5. Implement flow now blocks non-implementation tasks.
-6. Implement flow now prompts before overwriting files currently marked `complete` by scan.
-7. Debate panel now rehydrates existing debate log entries from plan file.
-8. Debate panel now displays task rationale.
-9. Debate conflict markers now raise warning in UI.
-10. Debate rewrite now regenerates rationale via AI.
-11. Debate split now supports AI-suggested split titles + user selection.
-12. Tree rows now show clearer blocked/origin/confidence-at-a-glance indicators.
-13. Status bar "No project goal set" click now opens Goal Setup.
+### New Test Coverage
+6. `undo-stack.test.ts` — pushUndoEntry cap/order/reference behavior (5 tests)
+7. `task-command.test.ts` — TaskCommandService unit tests
+8. `goal-command.test.ts` — GoalCommandService unit tests
+9. Test count: **6 suites / ~30 tests → 11 suites / 58 tests**
 
 ---
 
@@ -44,10 +39,12 @@ The following missing behaviors were implemented now:
 
 | Area | Status | Notes |
 |---|---|---|
-| Modular rewrite layout (`controller/parser/model/scanner/ai/...`) | ✅ Complete | Present and active runtime paths use v2 modules |
+| Modular rewrite layout (`controller/parser/model/scanner/ai/...`) | ✅ Complete | All v2 modules active |
 | v2 task/goal/scan/research models | ✅ Complete | Core fields implemented |
 | Queue builder with dependency/research blocking | ✅ Complete | Implemented and unit tested |
 | Safe-write/path checks + prompt masking baseline | ✅ Complete | Implemented and unit tested |
+| PlanController service decomposition | ✅ Complete | ScanService, ConsentService, GoalCommandService, TaskCommandService extracted |
+| Undo stack for plan mutations | ✅ Complete | `pushUndoEntry`, `undoLastChange` implemented and tested (P3-C5) |
 
 ### 2) Parser, Schema, Migration
 
@@ -55,8 +52,8 @@ The following missing behaviors were implemented now:
 |---|---|---|
 | v2 parser/serializer round-trip | ✅ Complete | Covered by `parser.test.ts` |
 | v1 detection + migration prompt + backup file | ✅ Complete | Implemented in controller/repository/upgrader |
-| v1 compatibility path | 🟡 Partial | Commands requiring v2 are blocked, but explicit "read-only mode UX" is minimal |
-| Debate archive comment block in `planmyproject.md` | ❌ Missing | Archive file exists under `.pmp/debate-archive/`, but no `pmp:debate-archive` block serialization |
+| v1 compatibility path | 🟡 Partial | "Keep v1 (read-only)" prompt option exists; but no visual read-only mode indicator in tree/CodeLens |
+| Debate archive comment block in `planmyproject.md` | ❌ Missing | Archive file exists under `.pmp/debate-archive/`, but no `pmp:debate-archive` block serialization/parsing |
 
 ### 3) Workspace Analysis / `.pmp` Persistence
 
@@ -65,10 +62,10 @@ The following missing behaviors were implemented now:
 | Scanner pipeline (discover/lang/deps/modules/signatures/features/tests) | ✅ Complete | Implemented |
 | Scan limits/settings (`maxFiles`, `maxFileSize`, `extractSignatures`) | ✅ Complete | Implemented via config |
 | `.pmpignore` support | ✅ Complete | Implemented |
-| `.gitignore` support in scanner | ✅ Complete | Implemented in this pass |
+| `.gitignore` support in scanner | ✅ Complete | Implemented |
 | Persisted scan cache/research index/debate archive files | ✅ Complete | Implemented |
-| `.gitignore` suggestion flow for scan cache | ✅ Complete | Implemented in this pass |
-| Rich classification (source/test/config/asset/generated buckets) | 🟡 Partial | Source/test handling exists; broader typed classification is limited |
+| `.gitignore` suggestion flow for scan cache | ✅ Complete | Implemented |
+| Rich classification (source/test/config/asset/generated buckets) | 🟡 Partial | Source, test, and generated-path exclusion exist; config/asset buckets not implemented |
 
 ### 4) AI Platform / Generation Pipeline
 
@@ -77,21 +74,21 @@ The following missing behaviors were implemented now:
 | Multi-provider service (Copilot/Claude/OpenAI) | ✅ Complete | Implemented via `AIService` abstraction |
 | API key storage in Secret Storage | ✅ Complete | Implemented with migration from legacy settings |
 | Layered prompt builder | ✅ Complete | Implemented |
-| Response parsing + validation + dedupe | 🟡 Partial | Validation exists; some strict schema checks from spec are lighter than documented |
+| Response parsing + validation + dedupe | 🟡 Partial | Validation exists; strict schema checks lighter than spec |
 | Confidence threshold gating | ✅ Complete | Implemented |
-| Goal criterion index validation | 🟡 Partial | Not strictly enforced against goal criteria bounds in generation pipeline |
-| Streaming UX | 🟡 Partial | On-chunk hooks exist; not fully reflected in Debate panel for planning stream |
+| Goal criterion index validation | 🟡 Partial | PromptBuilder instructs AI to reference goal criteria; no programmatic enforcement against criteria bounds |
+| Streaming UX | 🟡 Partial | `onChunk` used in plan/implement streams via `TaskCommandService`; Debate panel has no streaming — full response only |
 
 ### 5) UI / Commands
 
 | Area | Status | Notes |
 |---|---|---|
 | Command surface (retained + v2 additions) | ✅ Complete | Commands registered in `package.json` + controller |
-| Tree provider with task types + blocked/origin/confidence hints | ✅ Complete | Updated in this pass |
+| Tree provider with task types + blocked/origin/confidence hints | ✅ Complete | Implemented |
 | CodeLens (`Plan | Debate | Implement | Scan`) | ✅ Complete | Implemented |
-| Debate panel actions (accept/rewrite/split/dismiss/defer) | ✅ Complete | Implemented; rewrite/split improved this pass |
-| Debate persistence across restart | ✅ Complete | Rehydration implemented in this pass |
-| Goal setup flow | ✅ Complete | Input-driven flow implemented (not dedicated webview UI) |
+| Debate panel actions (accept/rewrite/split/dismiss/defer) | ✅ Complete | Implemented |
+| Debate persistence across restart | ✅ Complete | Rehydration implemented |
+| Goal setup flow | ✅ Complete | Input-driven flow implemented |
 | Status bar warning + scan states | ✅ Complete | Implemented |
 
 ### 6) Execution / Research / Implementation
@@ -100,8 +97,8 @@ The following missing behaviors were implemented now:
 |---|---|---|
 | Research completion + indexing + queue unblocking | ✅ Complete | Implemented |
 | Implement prompt includes research conclusions and linked files by policy | ✅ Complete | Implemented |
-| Research/decision tasks blocked from Implement flow | ✅ Complete | Implemented in this pass |
-| Extra confirm for writes into scan-complete files | ✅ Complete | Implemented in this pass |
+| Research/decision tasks blocked from Implement flow | ✅ Complete | Implemented |
+| Extra confirm for writes into scan-complete files | ✅ Complete | Implemented |
 | Auto-rescan after implement | ✅ Complete | Implemented |
 | Auto-mark task complete based on scan deltas | ❌ Missing | Not implemented |
 
@@ -111,44 +108,146 @@ The following missing behaviors were implemented now:
 |---|---|---|
 | Global + per-task file-send policy resolution | ✅ Complete | Implemented and tested |
 | Prompt masking (tokens/secrets) | ✅ Complete | Implemented |
-| Session consent persistence | ✅ Complete | Implemented in this pass (workspaceState) |
-| Extension state for active debate draft input | ❌ Missing | Not currently persisted |
+| Session consent persistence | ✅ Complete | Implemented via `workspaceState` |
+| Extension state for active debate draft input | ❌ Missing | Not persisted — draft lost on panel close |
 
 ### 8) Partial Codebase Awareness
 
 | Area | Status | Notes |
 |---|---|---|
-| Gap-aware generation based on scan completeness | 🟡 Partial | Existing-complete module exclusion exists |
-| Initial detection UX with options A/B/C (scan around gaps / fresh plan / import) | ❌ Missing | Not implemented as explicit UX flow |
-| Code-inferred task generation path | 🟡 Partial | Data model supports origin type; full pipeline behavior is limited |
+| Gap-aware generation based on scan completeness | 🟡 Partial | Existing complete-module context included in prompt; exclusion heuristics limited |
+| Initial detection UX with options A/B/C (scan around gaps / fresh plan / import) | ❌ Missing | `importGoalStatement` command exists but no structured first-run wizard |
+| Code-inferred task generation path | 🟡 Partial | `origin: "code-inferred"` in data model; no active generation pipeline produces it |
 
 ### 9) Testing / Acceptance Gates
 
 | Area | Status | Notes |
 |---|---|---|
-| Unit tests for parser/path/policy/queue/response/migration | ✅ Complete | 6 suites passing |
-| Integration workflows from spec | ❌ Missing | Most spec-listed integration scenarios are not yet automated |
-| Feature coverage >=95% gate | ❌ Missing | Not currently measured/reported in codebase |
+| Unit tests for parser/path/policy/queue/response/migration/goals/tasks/undo | ✅ Complete | 11 suites, 58 tests — all passing |
+| Integration workflows from spec | ❌ Missing | Spec-listed scenarios (scan→generate→queue, research→index→prompt, debate lifecycle) not automated |
+| Feature coverage >=95% gate | ❌ Missing | Not measured/reported; no merge gate enforcing it |
 
 ---
 
 ## Updated Bottom Line
 
-- v2 rewrite is structurally solid and operational.
-- Core planning, scanning, provider integration, and safe-write foundations are in place.
-- Several user-visible gaps were closed in this pass (scan trigger, debate rehydration, rewrite/split AI assist, safety prompts, gitignore flow).
-- Remaining work is concentrated in:
-  1. spec-level partial-codebase onboarding UX,
-  2. debate archive-in-plan serialization,
-  3. stronger schema/goal-reference validation,
-  4. integration test coverage and acceptance gating.
+- Architecture is now significantly cleaner: four services extracted from `PlanController` (ScanService, ConsentService, GoalCommandService, TaskCommandService), each independently testable.
+- Undo stack provides reversibility for plan mutations, closing a §8 autonomy constraint from the constitution.
+- Test coverage expanded from ~30 tests to 58 across 11 suites; all passing.
+- Remaining work concentrated in:
+  1. Partial-codebase onboarding wizard (A/B/C UX)
+  2. `pmp:debate-archive` block serialization in plan file
+  3. Debate draft input persistence across panel close
+  4. Debate panel streaming
+  5. Integration test harness + acceptance gating
 
 ---
 
-## Suggested Next Milestones
+## Remaining Work — Task List
 
-1. Implement partial-codebase detection wizard (A/B/C options) and wire into first-run planning.
-2. Add `pmp:debate-archive` block serialization/parsing and mark archived entries read-only in panel.
-3. Add integration test harness for migration, scan->generate->queue, research->index->prompt injection, and debate multi-author lifecycle.
-4. Add explicit feature coverage checklist mapped to spec sections for merge gate.
+Tasks are grouped by area and ordered by priority within each group. Each task includes exact file pointers.
 
+---
+
+### P4-A — Parser & Schema
+
+**P4-A1 — Add `pmp:debate-archive` block to plan serialization**  
+`DebateArchiver` writes `.pmp/debate-archive/<taskId>.md` but `archivedDebatePath` on `TaskNode` is never serialized into or parsed from `planmyproject.md`. When the plan is reloaded, the link between the task and its archive file is lost.  
+- Add `archivedDebatePath` to the metadata comment written by `serializePlanMarkdown` in [src/parser/PlanParser.ts](src/parser/PlanParser.ts)
+- Parse `archivedDebatePath` back in `parsePlanMarkdown` alongside the existing `pmp:id=...` comment fields
+- In `DebatePanel`, mark archived entries read-only when `task.archivedDebatePath` is set
+
+**P4-A2 — Add visual read-only mode for v1 plans**  
+When the user selects "Keep v1 (read-only)" ([src/controller/PlanController.ts:239](src/controller/PlanController.ts#L239)), commands that call `requireV2Plan` throw a plain error. There is no tree-level or CodeLens-level indication that the plan is read-only.  
+- Set a VS Code context key `planmyproject.schemaV1` when `plan.schemaVersion === "v1"` after load
+- In [src/ui/TreeProvider.ts](src/ui/TreeProvider.ts), show a "(read-only — v1)" label on the root tree item
+- In [src/ui/CodeLensProvider.ts](src/ui/CodeLensProvider.ts), suppress or grey out Plan/Implement/Debate lenses when the context key is set
+
+---
+
+### P4-B — Execution & Scan
+
+**P4-B1 — Auto-mark task complete based on scan deltas**  
+After `autoRescanOnImplement` triggers ([src/controller/TaskCommandService.ts:295](src/controller/TaskCommandService.ts#L295)), the new scan result is not compared to the pre-implement snapshot, so implemented tasks are never auto-completed.  
+- In `TaskCommandService.implementTask`, snapshot `existingFeatures` and `modules` before the AI call
+- After the post-implement rescan, diff the two scans for new/modified files that match `task.linkedFiles`
+- If linked files are now present in scan signatures, prompt: "Scan detected changes to linked files — mark [T000X] complete?"
+- Auto-mark if the user confirms; otherwise leave status unchanged
+
+**P4-B2 — Produce `code-inferred` tasks from `scanTask`**  
+`TaskNode.origin` supports `"code-inferred"` but `scanTask` ([src/controller/PlanController.ts:315](src/controller/PlanController.ts#L315)) only triggers a signature refresh — it never generates tasks. `TaskGenerator` always sets `origin: "ai-generated"` ([src/generation/TaskGenerator.ts:84](src/generation/TaskGenerator.ts#L84)).  
+- Add a `scanAndInfer` path in `TaskCommandService` (or a new `ScanInferService`) that, after a targeted scan, sends the fresh signatures to `TaskGenerator` with a flag indicating the source
+- Set `origin: "code-inferred"` on tasks produced by this path
+- Register a new command `planmyproject.inferTasksFromScan` and wire it to the CodeLens "Scan" action as a secondary option
+
+---
+
+### P4-C — Debate Panel
+
+**P4-C1 — Persist active debate draft input across panel close**  
+The debate panel input box is a WebView `<textarea>`. Its contents are lost when the panel is disposed. There is no persistence path in [src/debate/DebatePanel.ts](src/debate/DebatePanel.ts).  
+- On every `userMessage` WebView → extension message, also send a `draftUpdate` message with the current text
+- In `DebatePanel`, save the draft string to `context.workspaceState` under key `pmp.debateDraft.<taskId>`
+- On panel creation, pass the saved draft back via `postMessage({ type: 'restoreDraft', text })` after the WebView loads
+- Clear the stored draft when the user submits or closes the debate with a resolution action
+
+**P4-C2 — Add streaming to `DebateService` / `DebatePanel`**  
+`DebateService.generateOpening` and `continueDebate` call `AIService.generateText` without an `onChunk` callback, so the panel shows nothing until the full response arrives. `TaskCommandService` already uses `onChunk` ([src/controller/TaskCommandService.ts:151](src/controller/TaskCommandService.ts#L151)) as a pattern to follow.  
+- Add `onChunk` callback to `DebateService.generateOpening` and `continueDebate` in [src/debate/DebateService.ts](src/debate/DebateService.ts)
+- In `DebatePanel`, handle a new `assistantChunk` WebView message type that appends text to the in-progress bubble
+- Show a typing indicator in the panel while the stream is open; remove it on `assistantMessage` (final)
+
+---
+
+### P4-D — AI Generation
+
+**P4-D1 — Enforce goal criterion reference in `ResponseParser`**  
+`PromptBuilder` instructs the AI to reference a goal criterion per task ([src/ai/PromptBuilder.ts:73](src/ai/PromptBuilder.ts#L73)) but `ResponseParser` does not validate that the returned `goalRef` matches a real `ProjectGoal.id` or that any criterion is cited.  
+- In [src/ai/ResponseParser.ts](src/ai/ResponseParser.ts), after parsing the draft array, accept an optional `goalIds: string[]` parameter
+- If provided, reject any draft whose `goalRef` is non-null and not in `goalIds`, or downgrade its confidence by 0.2
+- Pass `plan.goals.map(g => g.id)` from `TaskGenerator` when calling the parser
+
+**P4-D2 — Tighten response schema validation**  
+`ResponseParser` accepts tasks with missing or extra fields more leniently than the spec requires. Edge cases (empty `title`, `confidence` outside 0–1, unknown `type`) pass through.  
+- In [src/ai/ResponseParser.ts](src/ai/ResponseParser.ts), add explicit guards: reject drafts with blank `title`; clamp `confidence` to `[0, 1]`; reject unknown `type` values instead of defaulting
+- Add test cases covering each guard in `test/response-parser.test.ts`
+
+---
+
+### P4-E — Workspace Scanner
+
+**P4-E1 — Add config/asset file classification buckets**  
+`WorkspaceScanner` classifies files as source, test, or generated-path. Config files (`.json`, `.yaml`, `.toml`, `.env.example`) and asset files (`.svg`, `.png`, `.css`) are either lumped into source or silently dropped — they never appear in the scan summary or prompt context.  
+- In [src/scanner/WorkspaceScanner.ts](src/scanner/WorkspaceScanner.ts), add `isConfigFile` and `isAssetFile` classifier functions alongside `isSourceFile` and `isTestFile`
+- Add `configFiles: string[]` and `assetFiles: string[]` fields to `WorkspaceScan` in [src/model/WorkspaceScan.ts](src/model/WorkspaceScan.ts)
+- Populate them during scan; include a short summary line in the `PromptBuilder` workspace layer when either list is non-empty
+
+---
+
+### P4-F — Partial Codebase Onboarding
+
+**P4-F1 — Implement first-run detection wizard (A/B/C options)**  
+When `openPlan` runs on a workspace with code but no `planmyproject.md`, there is no structured onboarding. The user lands directly in an empty tree. The spec calls for three options: (A) scan and generate a plan around existing gaps, (B) start a fresh blank plan, (C) import an existing goal markdown.  
+- In `PlanController.openPlan` ([src/controller/PlanController.ts:207](src/controller/PlanController.ts#L207)), detect: workspace has source files but no plan file
+- Show a `vscode.window.showQuickPick` with options A / B / C
+- Option A: run `scanService.refresh()` then pass scan result to `TaskGenerator` to seed root tasks with `origin: "code-inferred"`
+- Option B: call `goalCommandService.setProjectGoal()` as today
+- Option C: call `goalCommandService.importGoalStatement()` as today
+- Add a "Don't show again" option that sets a `workspaceState` flag to skip the wizard
+
+---
+
+### P4-G — Testing & Acceptance
+
+**P4-G1 — Integration test harness**  
+No end-to-end test covers the critical paths that the spec lists as acceptance criteria. Unit tests mock at the service boundary, so cross-module regressions (e.g., parser → queue → tree, research → index → prompt injection) are not caught.  
+- Add `test/integration/` directory with a minimal VS Code extension test host (or a node-only harness that exercises real file I/O)
+- Cover at minimum: (1) v1 → v2 migration round-trip, (2) scan → generate → queue derivation, (3) research complete → index entry → prompt inclusion, (4) debate open → rewrite → accept → plan serialization
+- Wire into `npm run test:integration` script in `package.json`
+
+**P4-G2 — Feature coverage checklist and merge gate**  
+There is no automated check that new code maintains spec alignment. The `>=95%` coverage target is aspirational but unmeasured.  
+- Create `scripts/check-feature-coverage.js` that reads a `FEATURE_CHECKLIST.json` mapping spec sections to test file + test name
+- Exit non-zero if any listed test is missing or failing
+- Add `npm run check:coverage` to the CI pipeline in `.github/workflows/` (or equivalent)
+- Seed `FEATURE_CHECKLIST.json` from the ✅ items in this document's "Current Status" tables
