@@ -1,7 +1,7 @@
 {
   "name": "plan-my-project",
   "displayName": "Plan My Project",
-  "description": "Unified project planning AI expansion and task execution.",
+  "description": "Research-first, goal-anchored AI planning and implementation for VS Code workspaces.",
   "icon": "media/marketplace-icon.png",
   "version": "1.0.2",
   "publisher": "aypande",
@@ -21,6 +21,8 @@
     "project planning",
     "task management",
     "copilot",
+    "claude",
+    "openai",
     "ai",
     "markdown",
     "productivity"
@@ -40,16 +42,6 @@
   "activationEvents": [
     "workspaceContains:planmyproject.md",
     "workspaceContains:projectplan.md",
-    "onCommand:planmyproject.openPlan",
-    "onCommand:planmyproject.planTask",
-    "onCommand:planmyproject.addTask",
-    "onCommand:planmyproject.addRootTask",
-    "onCommand:planmyproject.loadRequirementsFile",
-    "onCommand:planmyproject.drillDown",
-    "onCommand:planmyproject.implementTask",
-    "onCommand:planmyproject.deleteTask",
-    "onCommand:planmyproject.rebuildQueue",
-    "onCommand:planmyproject.cancelActiveRequest",
     "onView:planmyproject.tree"
   ],
   "main": "./out/extension.js",
@@ -84,10 +76,6 @@
         }
       },
       {
-        "command": "planmyproject.loadRequirementsFile",
-        "title": "PlanMyProject: Load Requirements File"
-      },
-      {
         "command": "planmyproject.drillDown",
         "title": "PlanMyProject: Drill Down Task",
         "icon": {
@@ -97,7 +85,7 @@
       },
       {
         "command": "planmyproject.implementTask",
-        "title": "PlanMyProject: Implement Task (Copilot)",
+        "title": "PlanMyProject: Implement Task",
         "icon": {
           "light": "media/execute.svg",
           "dark": "media/execute.svg"
@@ -134,6 +122,88 @@
           "light": "media/cancel.svg",
           "dark": "media/cancel.svg"
         }
+      },
+      {
+        "command": "planmyproject.setProjectGoal",
+        "title": "PlanMyProject: Set Project Goal",
+        "icon": {
+          "light": "media/goal.svg",
+          "dark": "media/goal.svg"
+        }
+      },
+      {
+        "command": "planmyproject.refreshScan",
+        "title": "PlanMyProject: Refresh Scan",
+        "icon": {
+          "light": "media/scan.svg",
+          "dark": "media/scan.svg"
+        }
+      },
+      {
+        "command": "planmyproject.debateTask",
+        "title": "PlanMyProject: Debate Task",
+        "icon": {
+          "light": "media/debate.svg",
+          "dark": "media/debate.svg"
+        }
+      },
+      {
+        "command": "planmyproject.markResearchComplete",
+        "title": "PlanMyProject: Mark Research Complete",
+        "icon": {
+          "light": "media/complete.svg",
+          "dark": "media/complete.svg"
+        }
+      },
+      {
+        "command": "planmyproject.showTaskRationale",
+        "title": "PlanMyProject: Show Task Rationale"
+      },
+      {
+        "command": "planmyproject.viewLinkedFiles",
+        "title": "PlanMyProject: View Linked Files"
+      },
+      {
+        "command": "planmyproject.importGoalStatement",
+        "title": "PlanMyProject: Import Goal Statement"
+      },
+      {
+        "command": "planmyproject.exportPlanSummary",
+        "title": "PlanMyProject: Export Plan Summary"
+      },
+      {
+        "command": "planmyproject.viewResearchIndex",
+        "title": "PlanMyProject: View Research Index"
+      },
+      {
+        "command": "planmyproject.viewDebateArchive",
+        "title": "PlanMyProject: View Debate Archive"
+      },
+      {
+        "command": "planmyproject.setTaskFileSendPolicy",
+        "title": "PlanMyProject: Set Task File Send Policy",
+        "icon": {
+          "light": "media/policy.svg",
+          "dark": "media/policy.svg"
+        }
+      },
+      {
+        "command": "planmyproject.scanTask",
+        "title": "PlanMyProject: Scan Task",
+        "icon": {
+          "light": "media/scan.svg",
+          "dark": "media/scan.svg"
+        }
+      },
+      {
+        "command": "planmyproject.undoLastChange",
+        "title": "Undo Last Change",
+        "category": "PlanMyProject"
+      },
+      {
+        "command": "planmyproject.setApiKey",
+        "title": "Set API Key",
+        "category": "PlanMyProject"
       }
     ],
     "keybindings": [
@@ -163,12 +233,12 @@
     "viewsWelcome": [
       {
         "view": "planmyproject.tree",
-        "contents": "No tasks found yet.\n\nUse this when requirements already exist in a root `.md` file.\nConsider: clearer requirement lines produce better root tasks.\n[Load Requirements File](command:planmyproject.loadRequirementsFile)\n\nUse this when starting from scratch or adding one objective manually.\nConsider: keep each root task scoped, actionable, and implementation-ready.\n[Add Root Task](command:planmyproject.addRootTask)",
+        "contents": "No tasks yet.\n\n[Add Root Task](command:planmyproject.addRootTask)\n[Set Project Goal](command:planmyproject.setProjectGoal)",
         "when": "planmyproject.workspaceOpen && planmyproject.treeEmpty"
       },
       {
         "view": "planmyproject.tree",
-        "contents": "PlanMyProject requires an open folder or workspace.\n\nOpen a project to create and manage your plan file.\n[Open Folder or Workspace](command:vscode.openFolder)",
+        "contents": "PlanMyProject requires an open folder or workspace.\n\n[Open Folder or Workspace](command:vscode.openFolder)",
         "when": "!planmyproject.workspaceOpen"
       }
     ],
@@ -185,54 +255,200 @@
           "group": "navigation@2"
         },
         {
-          "command": "planmyproject.rebuildQueue",
+          "command": "planmyproject.refreshScan",
           "when": "view == planmyproject.tree && planmyproject.workspaceOpen",
           "group": "navigation@3"
+        },
+        {
+          "command": "planmyproject.rebuildQueue",
+          "when": "view == planmyproject.tree && planmyproject.workspaceOpen",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
         {
           "command": "planmyproject.addTask",
-          "when": "view == planmyproject.tree && viewItem != activeRequestTaskRunning",
+          "when": "view == planmyproject.tree && viewItem =~ /^task:/",
           "group": "inline@1"
         },
         {
           "command": "planmyproject.planTask",
-          "when": "view == planmyproject.tree && viewItem != activeRequestTaskRunning",
+          "when": "view == planmyproject.tree && viewItem =~ /^task:/",
           "group": "inline@2"
         },
         {
-          "command": "planmyproject.implementTask",
-          "when": "view == planmyproject.tree && viewItem != activeRequestTaskRunning",
+          "command": "planmyproject.debateTask",
+          "when": "view == planmyproject.tree && viewItem =~ /^task:/",
           "group": "inline@3"
         },
         {
-          "command": "planmyproject.drillDown",
-          "when": "view == planmyproject.tree && viewItem != activeRequestTaskRunning",
+          "command": "planmyproject.implementTask",
+          "when": "view == planmyproject.tree && viewItem =~ /^task:/",
           "group": "inline@4"
         },
         {
-          "command": "planmyproject.deleteTask",
-          "when": "view == planmyproject.tree && viewItem != activeRequestTaskRunning",
+          "command": "planmyproject.markResearchComplete",
+          "when": "view == planmyproject.tree && (viewItem == task:research || viewItem == task:decision || viewItem == task:research:blocked || viewItem == task:decision:blocked)",
           "group": "inline@5"
         },
         {
-          "command": "planmyproject.cancelActiveRequest",
-          "when": "view == planmyproject.tree && viewItem == activeRequestTaskRunning",
-          "group": "inline@0"
+          "command": "planmyproject.setTaskFileSendPolicy",
+          "when": "view == planmyproject.tree && viewItem =~ /^task:/",
+          "group": "inline@6"
+        },
+        {
+          "command": "planmyproject.deleteTask",
+          "when": "view == planmyproject.tree && viewItem =~ /^task:/",
+          "group": "inline@7"
+        },
+        {
+          "command": "planmyproject.showTaskRationale",
+          "when": "view == planmyproject.tree && viewItem =~ /^task:/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "planmyproject.viewLinkedFiles",
+          "when": "view == planmyproject.tree && viewItem =~ /^task:/",
+          "group": "navigation@2"
+        },
+        {
+          "command": "planmyproject.viewDebateArchive",
+          "when": "view == planmyproject.tree && viewItem =~ /^task:/",
+          "group": "navigation@3"
         }
       ]
+    },
+    "configuration": {
+      "title": "PlanMyProject",
+      "properties": {
+        "planmyproject.aiProvider": {
+          "type": "string",
+          "enum": [
+            "copilot",
+            "claude",
+            "openai"
+          ],
+          "default": "copilot",
+          "description": "AI provider used by PlanMyProject."
+        },
+        "planmyproject.claudeApiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDeprecationMessage": "**Deprecated.** Storing API keys in settings risks VCS exposure. Use the **PlanMyProject: Set API Key** command instead.",
+          "description": "Anthropic Claude API key. Use 'PlanMyProject: Set API Key' command for secure storage."
+        },
+        "planmyproject.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDeprecationMessage": "**Deprecated.** Storing API keys in settings risks VCS exposure. Use the **PlanMyProject: Set API Key** command instead.",
+          "description": "OpenAI API key. Use 'PlanMyProject: Set API Key' command for secure storage."
+        },
+        "planmyproject.sendFileContentsToAI": {
+          "type": "boolean",
+          "default": false,
+          "description": "Global default for sending linked file contents to AI prompts."
+        },
+        "planmyproject.defaultTaskFileSendPolicy": {
+          "type": "string",
+          "enum": [
+            "global",
+            "always",
+            "never",
+            "ask"
+          ],
+          "default": "global",
+          "description": "Default per-task file send policy for new tasks."
+        },
+        "planmyproject.scanner.extractSignatures": {
+          "type": "boolean",
+          "default": true,
+          "description": "Extract function/class signatures during workspace scan."
+        },
+        "planmyproject.scanner.maxFilesScanned": {
+          "type": "number",
+          "default": 500,
+          "minimum": 50,
+          "description": "Maximum number of files included in scan results."
+        },
+        "planmyproject.scanner.maxFileSizeKb": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "description": "Maximum file size in KB for signature extraction."
+        },
+        "planmyproject.autoRescanOnImplement": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically run workspace scan after successful task implementation."
+        },
+        "planmyproject.confidenceThreshold": {
+          "type": "number",
+          "default": 0.5,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum confidence required to auto-commit AI-generated tasks."
+        },
+        "planmyproject.researchGate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Block implementation queue items until research/decision dependencies are done."
+        },
+        "planmyproject.debate.archiveAfterDays": {
+          "type": "number",
+          "default": 90,
+          "minimum": 1,
+          "description": "Archive debate entries older than this number of days."
+        },
+        "planmyproject.planFileName": {
+          "type": "string",
+          "default": "planmyproject.md",
+          "description": "Plan file name in workspace root."
+        },
+        "planmyproject.showRationaleInline": {
+          "type": "boolean",
+          "default": true,
+          "description": "Write AI-generated rationale lines below tasks in the plan file."
+        },
+        "planmyproject.gitignorePmpDir": {
+          "type": "boolean",
+          "default": true,
+          "description": "Offer .gitignore updates for scanner cache path under .pmp/."
+        },
+        "planmyproject.scanner.cacheTtlMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "description": "How many minutes a workspace scan result is considered fresh. Set to 0 to always rescan before AI operations."
+        },
+        "planmyproject.requireAiConsent": {
+          "type": "string",
+          "enum": [
+            "always",
+            "first-per-session",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Prompt before every AI operation.",
+            "Prompt once per VS Code session; subsequent operations in the same session are allowed automatically.",
+            "Never prompt — send context to AI without confirmation."
+          ],
+          "default": "first-per-session",
+          "description": "Controls when PlanMyProject asks for confirmation before sending context to the AI provider."
+        }
+      }
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run build",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "test:build": "tsc -p ./tsconfig.test.json",
-    "test": "npm run test:build && NODE_PATH=./test/shims node --test out-test/test/**/*.test.js",
+    "compile": "rimraf out && tsc -p ./",
+    "watch": "rimraf out && tsc -watch -p ./",
+    "test:build": "rimraf out-test && tsc -p ./tsconfig.test.json",
+    "test": "npm run test:build && NODE_PATH=./test/shims node --test out-test/test/*.test.js out-test/test/integration/*.test.js",
+    "test:integration": "npm run test:build && NODE_PATH=./test/shims node --test out-test/test/integration/*.test.js",
     "test:coverage": "npm run test:build && NODE_PATH=./test/shims node --test --experimental-test-coverage out-test/test/**/*.test.js",
     "build": "node ./scripts/update-readme-build-status.js",
     "build:status": "npm run build",
+    "check:coverage": "node scripts/check-feature-coverage.js",
     "verify": "npm run build",
     "package": "npx @vscode/vsce package --no-yarn --no-dependencies",
     "publish:vsce": "npx @vscode/vsce publish --no-yarn --no-dependencies"
@@ -240,7 +456,8 @@
   "devDependencies": {
     "@types/node": "^20.14.12",
     "@types/vscode": "^1.95.0",
-    "typescript": "^5.6.2",
-    "@vscode/vsce": "^3.7.1"
+    "@vscode/vsce": "^3.7.1",
+    "rimraf": "^6.1.3",
+    "typescript": "^5.6.2"
   }
 }

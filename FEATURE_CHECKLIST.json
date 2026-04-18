@@ -1,0 +1,104 @@
+[
+  {
+    "section": "2. Parser, Schema, Migration",
+    "feature": "v2 parser/serializer round-trip",
+    "testFile": "test/parser.test.ts",
+    "testName": "serializePlanMarkdown emits schema v2 and queue sections"
+  },
+  {
+    "section": "2. Parser, Schema, Migration",
+    "feature": "v1 detection and schema upgrade",
+    "testFile": "test/parser.test.ts",
+    "testName": "parsePlanMarkdown detects v1 schema marker"
+  },
+  {
+    "section": "2. Parser, Schema, Migration",
+    "feature": "v1 → v2 migration sets defaults",
+    "testFile": "test/schema-upgrader.test.ts",
+    "testName": "upgradeSchemaV1ToV2 sets v2 defaults"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Queue builder blocks implementation on research dependency",
+    "testFile": "test/queue.test.ts",
+    "testName": "buildExecutionQueue prioritizes research and blocks dependent implementation"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Queue builder unblocks implementation when dependency is done",
+    "testFile": "test/queue.test.ts",
+    "testName": "buildExecutionQueue allows implementation when dependencies are done"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Queue builder blocks on unresolved debate thread",
+    "testFile": "test/queue.test.ts",
+    "testName": "buildExecutionQueue blocks implementation while debate thread is unresolved"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Path safety: blocks traversal and absolute paths",
+    "testFile": "test/path-safety.test.ts",
+    "testName": "normalizeWorkspaceRelativePath blocks absolute and traversal paths"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Path safety: marks sensitive workspace paths",
+    "testFile": "test/path-safety.test.ts",
+    "testName": "isSensitiveWorkspacePath marks protected targets"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "File-send policy resolution for all policy values",
+    "testFile": "test/policy.test.ts",
+    "testName": "resolveFileSendPolicy ${label}"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Response parsing validates and normalizes tasks",
+    "testFile": "test/response-parser.test.ts",
+    "testName": "parseTaskGenerationResponse validates and normalizes tasks"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Goal parser extracts structured sections from markdown",
+    "testFile": "test/goal-parser.test.ts",
+    "testName": "parseGoalMarkdown extracts statement from first h1 heading"
+  },
+  {
+    "section": "3. Workspace Analysis",
+    "feature": "Scanner patchModuleSignatures updates without mutation",
+    "testFile": "test/scanner.test.ts",
+    "testName": "patchModuleSignatures updates signature for a file in an affected module"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Undo stack ordering and capacity",
+    "testFile": "test/undo-stack.test.ts",
+    "testName": "pushUndoEntry preserves order (oldest first)"
+  },
+  {
+    "section": "Integration",
+    "feature": "v1 → v2 migration round-trip: full parse/upgrade/serialize/reparse",
+    "testFile": "test/integration/integration.test.ts",
+    "testName": "v1 to v2 migration round-trip preserves all tasks and schema version"
+  },
+  {
+    "section": "Integration",
+    "feature": "Research gate → queue derivation cross-module path",
+    "testFile": "test/integration/integration.test.ts",
+    "testName": "research gate blocks implementation until research task is done"
+  },
+  {
+    "section": "Integration",
+    "feature": "Completed research conclusions flow into task generation prompt",
+    "testFile": "test/integration/integration.test.ts",
+    "testName": "completed research conclusions appear in task generation prompt"
+  },
+  {
+    "section": "Integration",
+    "feature": "Debate accept action persists through plan serialization round-trip",
+    "testFile": "test/integration/integration.test.ts",
+    "testName": "debate accept action persists through plan serialization round-trip"
+  }
+]

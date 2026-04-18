@@ -1,6 +1,6 @@
 # PlanMyProject
 
-Current release: `v1.0.2`
+Current release: `v2 rewrite (branch preview)`
 
 Planning real engineering work is usually fragmented across notes, tickets, and chat. Execution drifts, priorities blur, and tasks lose context.
 
@@ -8,6 +8,7 @@ PlanMyProject solves this by turning your workspace into a single planning-and-e
 
 - Keep one implementation plan in source control (`planmyproject.md` / `projectplan.md`)
 - Expand any task into actionable sub-tasks with Copilot
+- Debate task scope with `PlanBot` before committing to implementation
 - Auto-maintain an execution queue from leaf tasks
 - Implement selected tasks directly into workspace files with safety checks and approvals
 
@@ -31,7 +32,10 @@ Update source: `npm run build` or `npm run verify`
 
 1. VS Code `1.95+`
 2. Trusted workspace (untrusted workspaces are not supported)
-3. GitHub Copilot access for `Plan Task` and `Implement Task`
+3. AI provider access for planning/implementation:
+   - GitHub Copilot (default)
+   - Anthropic Claude (optional API key)
+   - OpenAI (optional API key)
 
 ## Get Started
 
@@ -39,7 +43,7 @@ Update source: `npm run build` or `npm run verify`
 2. Add a root objective with `PlanMyProject: Add Root Task`
 3. Select that task and run `PlanMyProject: Plan Task (One Level)` (or `Alt+P`)
 4. Repeat planning on child tasks to deepen the plan
-5. Run `PlanMyProject: Implement Task (Copilot)` on a leaf task to apply changes
+5. Run `PlanMyProject: Implement Task` on a leaf task to apply changes
 
 Supported plan files in workspace root (priority order):
 
@@ -133,10 +137,11 @@ Run: PlanMyProject: Plan Task (One Level)
 Result: [T0002..T0005] created as direct children
 ```
 
-### 6) Implement task with Copilot JSON writes
+### 6) Implement task with AI JSON writes
 
 - `Implement Task` asks Copilot for structured JSON changes
 - Applies create/update file writes in workspace
+- Blocks implementation tasks that have unresolved debate threads
 - Marks selected task subtree `[x]` on successful apply
 
 Example response format:
@@ -198,19 +203,36 @@ Delete [T0003]
 Result: [T0003] and descendants removed, queue updated
 ```
 
+### 10) Debate with PlanBot + debate-resolution gate
+
+- Debate panel labels assistant responses as `PlanBot`
+- Debate prompts enforce a critical style: justify, challenge, and rationalize user suggestions
+- Debate logs persist explicit action metadata (for example `[action:accept]`) in plan and archive entries
+- Queue and tree mark implementation tasks blocked until open debate threads are resolved
+
 ## Command Reference
 
 - `PlanMyProject: Open Plan`
 - `PlanMyProject: Plan Task (One Level)` (`Alt+P`)
 - `PlanMyProject: Add Task`
 - `PlanMyProject: Add Root Task`
-- `PlanMyProject: Load Requirements File`
 - `PlanMyProject: Drill Down Task`
-- `PlanMyProject: Implement Task (Copilot)`
+- `PlanMyProject: Implement Task`
 - `PlanMyProject: Delete Task`
 - `PlanMyProject: Rebuild Execution Queue`
 - `PlanMyProject: Refresh Tree`
 - `PlanMyProject: Cancel Active Request`
+- `PlanMyProject: Set Project Goal`
+- `PlanMyProject: Import Goal Statement`
+- `PlanMyProject: Refresh Scan`
+- `PlanMyProject: Debate Task`
+- `PlanMyProject: Mark Research Complete`
+- `PlanMyProject: Show Task Rationale`
+- `PlanMyProject: View Linked Files`
+- `PlanMyProject: Set Task File Send Policy`
+- `PlanMyProject: View Research Index`
+- `PlanMyProject: View Debate Archive`
+- `PlanMyProject: Export Plan Summary`
 
 ## Privacy and Copilot Data Flow
 

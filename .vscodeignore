@@ -18,3 +18,13 @@ skills/**
 .DS_Store
 *.vsix
 package-lock.json
+CLAUDE.md
+constitution.md
+FEATURE_PROGRESS.md
+Improvements.md
+PlanMyProject_v2_Spec.md
+planmyproject.template.md
+USER_GUIDE.md
+USER_GUIDE_UPDATED.md
+.claude/**
+memory/

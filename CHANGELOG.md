@@ -4,7 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-- No changes yet.
+- Debate panel assistant is now presented as `PlanBot`, including updated debate prompts and UI labels.
+- Debate prompts now force critical debate behavior: justify, challenge, and rationalize user suggestions before proposing an action.
+- Implementation flow now blocks tasks with unresolved debate threads (in addition to dependency/research blockers) and surfaces explicit block reasons in queue/tree messaging.
+- Debate serialization now persists structured action markers (`[action:accept|rewrite|split|dismiss|defer]`) in plan and archive logs.
+- Rewrote extension architecture for v2 around modular controller, parser, scanner, AI, debate, queue, and storage layers.
+- Added schema v2 parsing/serialization with typed task metadata, goal blocks, rationale, dependency-aware queue sections, and v1 migration support.
+- Added workspace scanner pipeline with language/dependency/signature/module inference plus persisted scan cache.
+- Added research index and debate archive persistence under `.pmp/`.
+- Added multi-provider AI abstraction (Copilot, Claude, OpenAI) and layered prompt/response parsing pipeline.
+- Added v2 command surface (goal setup/import, scan refresh, debate, rationale, linked files, policy override, index/archive viewers, summary export).
+- Replaced v1 tests with v2 unit coverage for parser, queue, migration, policy resolver, path safety, and AI response parsing.
 
 ## [1.0.2] - 2026-03-16
 
