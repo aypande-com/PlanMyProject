@@ -292,5 +292,17 @@
     "feature": "Scan delta does not false-positive on an unchanged linked file (P4-B1)",
     "testFile": "test/scan-delta.test.ts",
     "testName": "does not report a linked file with no change between scans"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "TaskGenerator.materializeDrafts tags code-inferred tasks distinctly from ai-generated (P4-B2)",
+    "testFile": "test/task-generator.test.ts",
+    "testName": "materializeDrafts tags tasks as code-inferred when the caller passes that origin"
+  },
+  {
+    "section": "6. Editor Integration",
+    "feature": "CodeLens exposes Infer as a secondary action next to Scan on v2 plans (P4-B2)",
+    "testFile": "test/codelens-provider.test.ts",
+    "testName": "v2 plan: CodeLens provides Plan, Debate, Implement, Scan, and Infer lenses per task"
   }
 ]

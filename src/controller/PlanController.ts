@@ -165,6 +165,7 @@ export class PlanController implements vscode.Disposable {
     register("planmyproject.viewDebateArchive", async (arg) => this.viewDebateArchive(arg));
     register("planmyproject.setTaskFileSendPolicy", async (arg) => this.setTaskFileSendPolicy(arg));
     register("planmyproject.scanTask", async (arg) => this.scanTask(arg));
+    register("planmyproject.inferTasksFromScan", async (arg) => this.taskCommandService.inferTasksFromScan(arg));
     register("planmyproject.undoLastChange", async () => this.undoLastChange());
     register("planmyproject.setApiKey", async () => this.promptSetApiKey());
   }

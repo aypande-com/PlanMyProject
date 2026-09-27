@@ -21,6 +21,12 @@ export class PlanCodeLensProvider implements vscode.CodeLensProvider {
         codeLenses.push(new vscode.CodeLens(range, { command: "planmyproject.implementTask", title: "Implement", arguments: args }));
       }
       codeLenses.push(new vscode.CodeLens(range, { command: "planmyproject.scanTask", title: "Scan", arguments: args }));
+      if (!isV1) {
+        // P4-B2: secondary option next to Scan - generates code-inferred
+        // child tasks from this task's linked-file signatures instead of
+        // just refreshing them.
+        codeLenses.push(new vscode.CodeLens(range, { command: "planmyproject.inferTasksFromScan", title: "Infer", arguments: args }));
+      }
     }
 
     return codeLenses;

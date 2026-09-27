@@ -196,6 +196,14 @@
         }
       },
       {
+        "command": "planmyproject.inferTasksFromScan",
+        "title": "PlanMyProject: Infer Tasks From Scan",
+        "icon": {
+          "light": "media/scan.svg",
+          "dark": "media/scan.svg"
+        }
+      },
+      {
         "command": "planmyproject.undoLastChange",
         "title": "Undo Last Change",
         "category": "PlanMyProject"

@@ -1,4 +1,4 @@
-import { createTaskNode, type PlanDocument, type TaskNode } from "../model/index";
+import { createTaskNode, type PlanDocument, type TaskNode, type TaskOrigin } from "../model/index";
 import { createTaskIdGenerator } from "../util";
 import type { AIService } from "../ai/AIService";
 import { buildTaskGenerationPrompt } from "../ai/PromptBuilder";
@@ -70,7 +70,12 @@ export class TaskGenerator {
     };
   }
 
-  materializeDrafts(plan: PlanDocument, parent: TaskNode, drafts: GeneratedTaskDraft[]): TaskNode[] {
+  // P4-B2: `origin` defaults to "ai-generated" (interactive Plan Task) but a
+  // caller driving generation from a workspace scan rather than an AI
+  // planning conversation - see TaskCommandService.inferTasksFromScan -
+  // passes "code-inferred" so the distinction TaskNode.origin already models
+  // is actually populated instead of every generated task looking identical.
+  materializeDrafts(plan: PlanDocument, parent: TaskNode, drafts: GeneratedTaskDraft[], origin: TaskOrigin = "ai-generated"): TaskNode[] {
     const idFactory = createTaskIdGenerator(plan);
     const byTitle = new Map<string, string>();
     const created: TaskNode[] = [];
@@ -81,7 +86,7 @@ export class TaskGenerator {
         title: draft.title,
         type: draft.type,
         parentId: parent.id,
-        origin: "ai-generated",
+        origin,
         goalRef: parent.goalRef,
         fileSendPolicy: parent.fileSendPolicy
       });

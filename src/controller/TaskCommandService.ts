@@ -221,6 +221,94 @@ export class TaskCommandService {
     });
   }
 
+  // P4-B2: TaskNode.origin has always supported "code-inferred" but nothing
+  // ever produced one - TaskGenerator.materializeDrafts hardcoded
+  // "ai-generated" regardless of caller, and there was no command that
+  // generated tasks from a scan rather than an interactive planning
+  // conversation. This reuses the same TaskGenerator pipeline as planTask
+  // (confidence threshold, low-confidence review prompt, materialization)
+  // with knowledge deliberately empty (this is about what the code reveals,
+  // not prior research conclusions) and always appends rather than offering
+  // replace/refine - it is the CodeLens "Scan" action's secondary option, a
+  // lighter-weight action than Plan Task, so it should never be destructive.
+  async inferTasksFromScan(arg: unknown): Promise<void> {
+    await this.ctx.ensureMutablePlan("Infer Tasks From Scan");
+    const plan = this.ctx.getPlan();
+    if (!plan || !this.ctx.getPlanUri()) {
+      return;
+    }
+
+    const task = this.ctx.resolveTaskFromArg(arg);
+    if (!task) {
+      void vscode.window.showWarningMessage("No task selected. Place cursor on a task line or run from task context menu.");
+      return;
+    }
+
+    if (!(await this.svc.consentService.requestConsent(`Infer tasks from scan for ${task.id}`, [
+      `Task: [${task.id}] ${task.title}`,
+      `Provider: ${this.svc.aiService.getSelectedProvider()}`,
+      "Workspace scan signatures for this task's linked files may be sent."
+    ]))) {
+      return;
+    }
+
+    await this.svc.scanService.refreshForTask(task);
+
+    await this.ctx.withActiveRequest(task.id, async (token) => {
+      const output = await this.svc.taskGenerator.generate({
+        plan: plan as PlanDocument,
+        parent: task,
+        scan: this.svc.scanService.getScan(),
+        knowledge: [],
+        confidenceThreshold: resolveStricterNumberGate(this.ctx.getConfiguration(), "confidenceThreshold", 0.5),
+        includeSignatures: this.ctx.getConfiguration().get<boolean>("scanner.extractSignatures", true),
+        onChunk: async () => {
+          this.svc.treeProvider.setRequestStatus({
+            taskId: task.id,
+            detail: "Inferring tasks from scan...",
+            state: "running"
+          });
+          if (token.isCancellationRequested) {
+            throw new Error("Cancelled");
+          }
+        }
+      });
+
+      let draftsToCommit = output.accepted;
+      if (output.requiresReview.length > 0) {
+        const decision = await vscode.window.showQuickPick(
+          [
+            { label: "Commit accepted tasks only", value: "accepted" as const },
+            { label: "Include low-confidence tasks", value: "all" as const },
+            { label: "Cancel", value: "cancel" as const }
+          ],
+          {
+            placeHolder: `${output.requiresReview.length} low-confidence task(s) inferred. Choose commit strategy.`
+          }
+        );
+
+        if (!decision || decision.value === "cancel") {
+          throw new Error("Cancelled");
+        }
+
+        if (decision.value === "all") {
+          draftsToCommit = output.drafts;
+        }
+      }
+
+      const materialized = this.svc.taskGenerator.materializeDrafts(plan as PlanDocument, task, draftsToCommit, "code-inferred");
+      for (const created of materialized) {
+        addTask(plan as PlanDocument, created);
+      }
+
+      await this.ctx.persistAndRefresh();
+
+      void vscode.window.showInformationMessage(
+        `Inferred ${materialized.length} child task(s) for ${task.id} from scan.\n${summarizeDraftTasks(draftsToCommit)}`
+      );
+    });
+  }
+
   async implementTask(arg: unknown): Promise<void> {
     await this.ctx.ensureMutablePlan("Implement Task");
     const plan = this.ctx.getPlan();

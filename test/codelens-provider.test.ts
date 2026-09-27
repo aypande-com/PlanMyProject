@@ -50,7 +50,7 @@ const V1_PLAN = [
   "1. [T0001] Build feature"
 ].join("\n");
 
-test("v2 plan: CodeLens provides Plan, Debate, Implement, and Scan lenses per task", () => {
+test("v2 plan: CodeLens provides Plan, Debate, Implement, Scan, and Infer lenses per task", () => {
   const provider = new PlanCodeLensProvider();
   const doc = makeDocument(V2_PLAN) as Parameters<typeof provider.provideCodeLenses>[0];
   const lenses = provider.provideCodeLenses(doc);
@@ -60,7 +60,8 @@ test("v2 plan: CodeLens provides Plan, Debate, Implement, and Scan lenses per ta
   assert.ok(commands.includes("planmyproject.debateTask"), "Debate lens missing");
   assert.ok(commands.includes("planmyproject.implementTask"), "Implement lens missing");
   assert.ok(commands.includes("planmyproject.scanTask"), "Scan lens missing");
-  assert.equal(lenses.length, 4, "Expected exactly 4 lenses for one v2 task");
+  assert.ok(commands.includes("planmyproject.inferTasksFromScan"), "Infer lens missing");
+  assert.equal(lenses.length, 5, "Expected exactly 5 lenses for one v2 task");
 });
 
 test("v1 plan: CodeLens suppresses Plan, Debate, Implement — only Scan remains", () => {
@@ -72,6 +73,7 @@ test("v1 plan: CodeLens suppresses Plan, Debate, Implement — only Scan remains
   assert.ok(!commands.includes("planmyproject.planTask"), "Plan lens must be suppressed for v1");
   assert.ok(!commands.includes("planmyproject.debateTask"), "Debate lens must be suppressed for v1");
   assert.ok(!commands.includes("planmyproject.implementTask"), "Implement lens must be suppressed for v1");
+  assert.ok(!commands.includes("planmyproject.inferTasksFromScan"), "Infer lens must be suppressed for v1");
   assert.ok(commands.includes("planmyproject.scanTask"), "Scan lens must remain for v1");
   assert.equal(lenses.length, 1, "Expected exactly 1 lens (Scan) for one v1 task");
 });
