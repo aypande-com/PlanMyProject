@@ -334,5 +334,23 @@
     "feature": "Response parser downgrades every draft when the goal has zero criteria (P4-D1)",
     "testFile": "test/response-parser.test.ts",
     "testName": "parseTaskGenerationResponse downgrades every task when the goal has no criteria at all"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Queue builder surfaces a dependency cycle via detectedCycles instead of silently absorbing it (P4-H4)",
+    "testFile": "test/queue.test.ts",
+    "testName": "buildExecutionQueue reports a two-task dependency cycle via detectedCycles"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Queue builder detects a longer (three-task) dependency cycle (P4-H4)",
+    "testFile": "test/queue.test.ts",
+    "testName": "buildExecutionQueue reports a longer cycle (three tasks) via detectedCycles"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Queue builder does not false-positive detectedCycles on an acyclic plan (P4-H4)",
+    "testFile": "test/queue.test.ts",
+    "testName": "buildExecutionQueue has no detectedCycles field for an acyclic plan"
   }
 ]

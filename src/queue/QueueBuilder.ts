@@ -11,6 +11,13 @@ export interface QueueSections {
   decision: TaskNode[];
   implementationReady: TaskNode[];
   milestone: TaskNode[];
+  // P4-H4: task IDs the topological sort could not place because they sit in
+  // a dependency cycle (dependsOn edges forming a loop). Present only when
+  // non-empty. Those tasks still end up in the queue (sorted by traversal
+  // rank as a fallback, see sortLeavesByDependencies) rather than being
+  // dropped, but they will never actually become unblocked since a cycle by
+  // definition has no valid completion order.
+  detectedCycles?: string[];
 }
 
 const DEFAULT_OPTIONS: QueueBuildOptions = {
@@ -27,7 +34,7 @@ export function buildExecutionQueue(plan: PlanDocument, options?: Partial<QueueB
   const implementationReady: TaskNode[] = [];
   const milestone: TaskNode[] = [];
 
-  const orderedLeaves = sortLeavesByDependencies(plan, leaves);
+  const { ordered: orderedLeaves, cycleTaskIds } = sortLeavesByDependencies(plan, leaves);
   const unresolvedResearchParents = buildUnresolvedResearchParentIds(plan);
 
   for (const task of orderedLeaves) {
@@ -63,11 +70,12 @@ export function buildExecutionQueue(plan: PlanDocument, options?: Partial<QueueB
     research,
     decision,
     implementationReady,
-    milestone
+    milestone,
+    ...(cycleTaskIds.length > 0 ? { detectedCycles: cycleTaskIds } : {})
   };
 }
 
-function sortLeavesByDependencies(plan: PlanDocument, leaves: TaskNode[]): TaskNode[] {
+function sortLeavesByDependencies(plan: PlanDocument, leaves: TaskNode[]): { ordered: TaskNode[]; cycleTaskIds: string[] } {
   // P0-B1: this used to call getTaskTraversalRank (a full tree walk from all
   // roots) inside compareTaskOrder, and compareTaskOrder ran on every
   // comparison of a full queue.sort() repeated on every single insertion, on
@@ -125,12 +133,12 @@ function sortLeavesByDependencies(plan: PlanDocument, leaves: TaskNode[]): TaskN
   }
 
   if (output.length === leaves.length) {
-    return output;
+    return { ordered: output, cycleTaskIds: [] };
   }
 
   const seen = new Set(output.map((task) => task.id));
   const remaining = leaves.filter((task) => !seen.has(task.id)).sort(compare);
-  return [...output, ...remaining];
+  return { ordered: [...output, ...remaining], cycleTaskIds: remaining.map((task) => task.id) };
 }
 
 // Min-heap keyed by `compare`, used instead of a sorted array so that both

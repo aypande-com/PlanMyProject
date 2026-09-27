@@ -6,6 +6,7 @@ import {
 } from "../model/index";
 import { parsePlanMarkdown, upgradeSchemaV1ToV2 } from "../parser";
 import { resolveStricterBooleanGate } from "../util";
+import { buildExecutionQueue } from "../queue/QueueBuilder";
 import { PlanRepository, findPlanUris, getGitUserName, getWorkspaceRootUri, hasOpenWorkspace, readTextFile, uriExists } from "../storage";
 import { AIService } from "../ai/AIService";
 import { TaskGenerator } from "../generation";
@@ -44,6 +45,8 @@ export class PlanController implements vscode.Disposable {
 
   private activeRequest: vscode.CancellationTokenSource | undefined;
   private readonly warnedDebateConflicts = new Set<string>();
+  private readonly warnedDependencyCycles = new Set<string>();
+  private watcherErrorWarned = false;
   private isSelfWriting = false;
   private readonly undoStack: string[] = [];
   private static readonly UNDO_STACK_MAX = 10;
@@ -179,32 +182,61 @@ export class PlanController implements vscode.Disposable {
     // trigger a re-parse — it causes redundant I/O and interferes with streaming.
     this.context.subscriptions.push(
       watcher,
-      watcher.onDidCreate(async () => this.refreshPlanState()),
-      watcher.onDidChange(async () => {
-        if (this.isSelfWriting) {
-          return;
-        }
-        await this.refreshPlanState();
-      }),
-      watcher.onDidDelete(async () => this.refreshPlanState()),
-      vscode.workspace.onDidSaveTextDocument(async (document) => {
-        if (this.isSelfWriting) {
-          return;
-        }
-        // Fast path: planUri is already known — compare directly, no filesystem call.
-        if (this.planUri) {
-          if (document.uri.toString() === this.planUri.toString()) {
+      watcher.onDidCreate(async () => this.safeWatcherCallback("onDidCreate", () => this.refreshPlanState())),
+      watcher.onDidChange(async () =>
+        this.safeWatcherCallback("onDidChange", async () => {
+          if (this.isSelfWriting) {
+            return;
+          }
+          await this.refreshPlanState();
+        })
+      ),
+      watcher.onDidDelete(async () => this.safeWatcherCallback("onDidDelete", () => this.refreshPlanState())),
+      vscode.workspace.onDidSaveTextDocument(async (document) =>
+        this.safeWatcherCallback("onDidSaveTextDocument", async () => {
+          if (this.isSelfWriting) {
+            return;
+          }
+          // Fast path: planUri is already known — compare directly, no filesystem call.
+          if (this.planUri) {
+            if (document.uri.toString() === this.planUri.toString()) {
+              await this.refreshPlanState();
+            }
+            return;
+          }
+          // Cold-start fallback: planUri not yet resolved, check filesystem once.
+          const planUris = await findPlanUris();
+          if (planUris.some((uri) => uri.toString() === document.uri.toString())) {
             await this.refreshPlanState();
           }
-          return;
-        }
-        // Cold-start fallback: planUri not yet resolved, check filesystem once.
-        const planUris = await findPlanUris();
-        if (planUris.some((uri) => uri.toString() === document.uri.toString())) {
-          await this.refreshPlanState();
-        }
-      })
+        })
+      )
     );
+  }
+
+  // P4-H3: these watcher callbacks used to run bare - an unhandled rejection
+  // (a bad parse, a transient file-read error) was silently swallowed, with
+  // no output-channel entry and no way for the user to know the plan view
+  // might now be stale. Logs every failure; the popup is shown once per
+  // session so a repeatedly-failing watcher does not spam notifications.
+  private async safeWatcherCallback(label: string, fn: () => Promise<void>): Promise<void> {
+    try {
+      await fn();
+    } catch (err) {
+      const message = err instanceof Error ? err.stack ?? err.message : String(err);
+      this.outputChannel.appendLine(`[PlanController] Watcher callback "${label}" failed: ${message}`);
+      if (!this.watcherErrorWarned) {
+        this.watcherErrorWarned = true;
+        void vscode.window.showWarningMessage(
+          "PlanMyProject: a background file-watcher update failed. The plan view may be out of date until the next change.",
+          "Show Output"
+        ).then((choice) => {
+          if (choice === "Show Output") {
+            this.outputChannel.show(true);
+          }
+        });
+      }
+    }
   }
 
   private async openPlan(): Promise<void> {
@@ -230,6 +262,10 @@ export class PlanController implements vscode.Disposable {
       }
     } else {
       this.plan = loaded.parsed.plan;
+    }
+
+    if (this.plan) {
+      this.warnDependencyCycles(buildExecutionQueue(this.plan).detectedCycles ?? []);
     }
 
     this.render();
@@ -647,6 +683,26 @@ export class PlanController implements vscode.Disposable {
     const extra = newIds.length > 5 ? ` (+${newIds.length - 5} more)` : "";
     void vscode.window.showWarningMessage(
       `Debate log conflict${newIds.length > 1 ? "s" : ""} detected on: ${preview}${extra}. Please resolve in the plan file.`
+    );
+  }
+
+  // P4-H4: buildExecutionQueue's topological sort silently fell back to
+  // rank-ordering any task it couldn't place in a dependency cycle - those
+  // tasks stayed in the queue with no indication they can never actually
+  // become unblocked (a cycle has no valid completion order by definition).
+  // Warned once per task ID per session, same pattern as warnDebateConflicts.
+  private warnDependencyCycles(cycleTaskIds: string[]): void {
+    const newIds = cycleTaskIds.filter((id) => !this.warnedDependencyCycles.has(id));
+    if (newIds.length === 0) {
+      return;
+    }
+    for (const id of newIds) {
+      this.warnedDependencyCycles.add(id);
+    }
+    const preview = newIds.slice(0, 5).join(", ");
+    const extra = newIds.length > 5 ? ` (+${newIds.length - 5} more)` : "";
+    void vscode.window.showWarningMessage(
+      `Dependency cycle detected involving: ${preview}${extra}. These tasks can never become unblocked until the cycle is broken.`
     );
   }
 

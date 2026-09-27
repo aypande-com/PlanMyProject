@@ -148,3 +148,59 @@ test("research-gate blocking (no dependsOn edge) survives a round trip and clear
   const clearedQueue = buildExecutionQueue(roundTripped, { researchGate: true });
   assert.equal(clearedQueue.implementationReady.map((t) => t.id).includes("T0003"), true, "must be ready once the sibling research task is done");
 });
+
+// P4-H4: a dependency cycle used to be silently absorbed into the queue
+// (rank-ordered in as a fallback) with nothing indicating those tasks can
+// never actually become unblocked.
+test("buildExecutionQueue reports a two-task dependency cycle via detectedCycles", () => {
+  const plan = createEmptyPlanDocument();
+  const root = createTaskNode({ id: "T0001", title: "Root", type: "milestone" });
+  const a = createTaskNode({ id: "T0002", title: "A", type: "implementation", parentId: "T0001" });
+  const b = createTaskNode({ id: "T0003", title: "B", type: "implementation", parentId: "T0001" });
+  a.dependsOn = ["T0003"];
+  b.dependsOn = ["T0002"];
+
+  addTask(plan, root);
+  addTask(plan, a);
+  addTask(plan, b);
+
+  const queue = buildExecutionQueue(plan);
+  assert.deepEqual(new Set(queue.detectedCycles), new Set(["T0002", "T0003"]));
+
+  const accountedFor = queue.blocked.length + queue.implementationReady.length + queue.research.length + queue.decision.length + queue.milestone.length;
+  assert.equal(accountedFor, 2, "cyclic tasks must still land in the queue, not be dropped");
+});
+
+test("buildExecutionQueue reports a longer cycle (three tasks) via detectedCycles", () => {
+  const plan = createEmptyPlanDocument();
+  const root = createTaskNode({ id: "T0001", title: "Root", type: "milestone" });
+  const a = createTaskNode({ id: "T0002", title: "A", type: "implementation", parentId: "T0001" });
+  const b = createTaskNode({ id: "T0003", title: "B", type: "implementation", parentId: "T0001" });
+  const c = createTaskNode({ id: "T0004", title: "C", type: "implementation", parentId: "T0001" });
+  a.dependsOn = ["T0004"];
+  b.dependsOn = ["T0002"];
+  c.dependsOn = ["T0003"];
+
+  addTask(plan, root);
+  addTask(plan, a);
+  addTask(plan, b);
+  addTask(plan, c);
+
+  const queue = buildExecutionQueue(plan);
+  assert.deepEqual(new Set(queue.detectedCycles), new Set(["T0002", "T0003", "T0004"]));
+});
+
+test("buildExecutionQueue has no detectedCycles field for an acyclic plan", () => {
+  const plan = createEmptyPlanDocument();
+  const root = createTaskNode({ id: "T0001", title: "Root", type: "milestone" });
+  const a = createTaskNode({ id: "T0002", title: "A", type: "implementation", parentId: "T0001" });
+  const b = createTaskNode({ id: "T0003", title: "B", type: "implementation", parentId: "T0001" });
+  b.dependsOn = ["T0002"];
+
+  addTask(plan, root);
+  addTask(plan, a);
+  addTask(plan, b);
+
+  const queue = buildExecutionQueue(plan);
+  assert.equal(queue.detectedCycles, undefined);
+});
