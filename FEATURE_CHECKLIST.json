@@ -178,5 +178,65 @@
     "feature": "fileSendPolicy never suppresses all linked-file egress before the sensitivity check runs (P0-D2)",
     "testFile": "test/task-command.test.ts",
     "testName": "collectLinkedFileSnapshots sends nothing when the task's fileSendPolicy is never"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Masking: fine-grained GitHub PATs (github_pat_) (P0-D3)",
+    "testFile": "test/masking.test.ts",
+    "testName": "masks fine-grained GitHub PATs (github_pat_)"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Masking: GitLab PATs (glpat-) (P0-D3)",
+    "testFile": "test/masking.test.ts",
+    "testName": "masks GitLab PATs (glpat-)"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Masking: AWS access key IDs (P0-D3)",
+    "testFile": "test/masking.test.ts",
+    "testName": "masks AWS access key IDs"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Masking: GCP API keys (P0-D3)",
+    "testFile": "test/masking.test.ts",
+    "testName": "masks GCP API keys"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Masking: Slack tokens (P0-D3)",
+    "testFile": "test/masking.test.ts",
+    "testName": "masks Slack tokens"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Masking: JWTs (P0-D3)",
+    "testFile": "test/masking.test.ts",
+    "testName": "masks JWTs"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Masking: database connection strings with inline credentials (P0-D3)",
+    "testFile": "test/masking.test.ts",
+    "testName": "masks database connection strings with inline credentials"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Masking: JSON-quoted-key password/secret/token/api_key pairs (P0-D3)",
+    "testFile": "test/masking.test.ts",
+    "testName": "masks generic password/secret/token/api_key key-value pairs"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "maskEmails/maskIpAddresses default to false and are off unless explicitly enabled (P0-D3)",
+    "testFile": "test/masking.test.ts",
+    "testName": "does not mask emails or IPs by default"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "AIService wires masking options to planmyproject.masking.* settings, not a hardcoded false (P0-D3)",
+    "testFile": "test/ai-service.test.ts",
+    "testName": "resolveMaskingOptions reflects planmyproject.masking.* settings"
   }
 ]

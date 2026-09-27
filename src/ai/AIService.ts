@@ -17,10 +17,7 @@ export class AIService {
 
   async generateText(prompt: string, options?: AIStreamOptions & { providerOverride?: AIProviderId }): Promise<AITextResponse> {
     const provider = await this.resolveProvider(options?.providerOverride);
-    const maskedPrompt = maskPromptText(prompt, {
-      maskEmails: false,
-      maskIpAddresses: false
-    });
+    const maskedPrompt = maskPromptText(prompt, this.resolveMaskingOptions());
     try {
       return await provider.generate(maskedPrompt, options);
     } catch (err) {
@@ -29,6 +26,21 @@ export class AIService {
       }
       throw err;
     }
+  }
+
+  // P0-D3: maskEmails/maskIpAddresses were hardcoded false with no caller
+  // able to set them - an option nothing can reach is worse than no option.
+  // Wired to real settings instead of deleted, since masking emails/IPs is a
+  // legitimate per-user preference distinct from the unconditional secret
+  // patterns in PromptMasker, which are never optional. Extracted to its own
+  // method so the settings read is directly testable without invoking a real
+  // AI provider.
+  private resolveMaskingOptions(): { maskEmails: boolean; maskIpAddresses: boolean } {
+    const configuration = vscode.workspace.getConfiguration("planmyproject");
+    return {
+      maskEmails: configuration.get<boolean>("masking.maskEmails", false),
+      maskIpAddresses: configuration.get<boolean>("masking.maskIpAddresses", false)
+    };
   }
 
   getSelectedProvider(): AIProviderId {

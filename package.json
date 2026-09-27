@@ -429,6 +429,18 @@
           "default": true,
           "description": "Offer .gitignore updates for scanner cache path under .pmp/."
         },
+        "planmyproject.masking.maskEmails": {
+          "type": "boolean",
+          "scope": "window",
+          "default": false,
+          "description": "Redact email addresses from prompts sent to AI providers. Independent of the always-on secret patterns (API keys, tokens, connection strings), which are never optional."
+        },
+        "planmyproject.masking.maskIpAddresses": {
+          "type": "boolean",
+          "scope": "window",
+          "default": false,
+          "description": "Redact IP addresses from prompts sent to AI providers. Independent of the always-on secret patterns (API keys, tokens, connection strings), which are never optional."
+        },
         "planmyproject.scanner.cacheTtlMinutes": {
           "type": "number",
           "scope": "window",

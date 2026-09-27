@@ -106,3 +106,27 @@ test("getApiKey returns undefined when neither a setting nor a secret exists", a
   const key = await service.getApiKey("claude");
   assert.equal(key, undefined);
 });
+
+function resolveMaskingOptions(service: AIService) {
+  return (service as unknown as { resolveMaskingOptions: () => { maskEmails: boolean; maskIpAddresses: boolean } }).resolveMaskingOptions();
+}
+
+// P0-D3: maskEmails/maskIpAddresses used to be hardcoded false in
+// generateText with no caller able to set them. Testing generateText itself
+// would require invoking a real AI provider (network calls, vscode.lm), so
+// this verifies the settings read directly instead.
+test("resolveMaskingOptions defaults both to false when unset", () => {
+  const { context } = createFakeContext();
+  const service = new AIService(context);
+  assert.deepEqual(resolveMaskingOptions(service), { maskEmails: false, maskIpAddresses: false });
+});
+
+test("resolveMaskingOptions reflects planmyproject.masking.* settings", async () => {
+  const { context } = createFakeContext();
+  const configuration = vscode.workspace.getConfiguration("planmyproject");
+  await configuration.update("masking.maskEmails", true, vscode.ConfigurationTarget.Global);
+  await configuration.update("masking.maskIpAddresses", true, vscode.ConfigurationTarget.Global);
+
+  const service = new AIService(context);
+  assert.deepEqual(resolveMaskingOptions(service), { maskEmails: true, maskIpAddresses: true });
+});
