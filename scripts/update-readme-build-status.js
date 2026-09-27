@@ -230,7 +230,11 @@ function main() {
     fs.unlinkSync(TAP_REPORT_PATH);
   }
 
-  const compile = runCommand("npx", ["tsc", "-p", "./"]);
+  // --noEmit: this only needs to know whether the project typechecks, not
+  // emit anything - a plain `tsc -p ./` here re-populates out/ with the old
+  // unbundled per-module output on top of esbuild's single bundle (P0-C2),
+  // since this script's own tsc invocation is independent of npm run compile.
+  const compile = runCommand("npx", ["tsc", "--noEmit", "-p", "./"]);
   process.stdout.write(compile.output);
 
   const testBuild = runCommand("npx", ["tsc", "-p", "./tsconfig.test.json"]);

@@ -31,3 +31,7 @@ USER_GUIDE.md
 USER_GUIDE_UPDATED.md
 .claude/**
 memory/
+esbuild.js
+FEATURE_CHECKLIST.json
+PlanMyProject_v3_Implementation_Plan.md
+planmyproject.md
