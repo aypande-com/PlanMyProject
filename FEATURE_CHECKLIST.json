@@ -136,5 +136,23 @@
     "feature": "Implement-context research conclusions (dependency + sibling notes) survive a round trip (P0-B3)",
     "testFile": "test/task-command.test.ts",
     "testName": "collectResearchConclusions picks up dependency and sibling notes after a round trip"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "API key one-way migration from settings.json to secret storage (P0-D1)",
+    "testFile": "test/ai-service.test.ts",
+    "testName": "getApiKey migrates a workspace-scoped setting to secrets and clears it"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "API key migration clears the specific scope it was set in, not just global (P0-D1)",
+    "testFile": "test/ai-service.test.ts",
+    "testName": "getApiKey migrates a global-scoped setting and clears that scope specifically"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "API key migration runs at most once, no repeat notification (P0-D1)",
+    "testFile": "test/ai-service.test.ts",
+    "testName": "getApiKey does not re-migrate or re-notify once the setting has been cleared"
   }
 ]

@@ -52,28 +52,56 @@ export class AIService {
     const secretName = provider === "claude"
       ? "planmyproject.claudeApiKey"
       : "planmyproject.openaiApiKey";
+    const settingKey = provider === "claude" ? "claudeApiKey" : "openaiApiKey";
 
     const configuration = vscode.workspace.getConfiguration("planmyproject");
-    const configuredSetting = provider === "claude"
-      ? configuration.get<string>("claudeApiKey", "")
-      : configuration.get<string>("openaiApiKey", "");
+    const configuredSetting = configuration.get<string>(settingKey, "");
     const normalizedSetting = configuredSetting?.trim();
-    const normalizedSecret = (await this.context.secrets.get(secretName))?.trim();
 
-    // If user explicitly set a key in settings, use it and refresh secret storage.
+    // One-way migration (P0-D1): a key found in settings.json is moved to
+    // context.secrets and the plaintext setting is cleared, at every scope it
+    // was set in - claudeApiKey/openaiApiKey are now `application`-scoped, so
+    // this is also the path that repairs a workspace settings.json left over
+    // from before that scope existed. This runs at most once per key: after
+    // the setting is cleared, later calls fall straight through to secrets.
     if (normalizedSetting) {
-      if (normalizedSetting !== normalizedSecret) {
-        await this.context.secrets.store(secretName, normalizedSetting);
-      }
-      await this.warnApiKeyInSettings(provider);
+      await this.context.secrets.store(secretName, normalizedSetting);
+      await this.clearSettingAtEveryScope(configuration, settingKey);
+      await this.notifyApiKeyMigrated(provider, settingKey);
       return normalizedSetting;
     }
 
+    const normalizedSecret = (await this.context.secrets.get(secretName))?.trim();
     if (normalizedSecret) {
       return normalizedSecret;
     }
 
     return undefined;
+  }
+
+  private async clearSettingAtEveryScope(configuration: vscode.WorkspaceConfiguration, key: string): Promise<void> {
+    const inspected = configuration.inspect<string>(key);
+    if (inspected?.globalValue !== undefined) {
+      await configuration.update(key, undefined, vscode.ConfigurationTarget.Global);
+    }
+    if (inspected?.workspaceValue !== undefined) {
+      await configuration.update(key, undefined, vscode.ConfigurationTarget.Workspace);
+    }
+    if (inspected?.workspaceFolderValue !== undefined) {
+      await configuration.update(key, undefined, vscode.ConfigurationTarget.WorkspaceFolder);
+    }
+  }
+
+  private async notifyApiKeyMigrated(provider: "claude" | "openai", settingKey: string): Promise<void> {
+    const choice = await vscode.window.showInformationMessage(
+      `PlanMyProject: Your ${provider} API key was found in settings.json (planmyproject.${settingKey}) and has been moved to ` +
+      `secure storage. It has been removed from settings.json. If this file was ever committed to version control, treat the ` +
+      `key as compromised and rotate it.`,
+      "Open Settings"
+    );
+    if (choice === "Open Settings") {
+      await vscode.commands.executeCommand("workbench.action.openSettings", `planmyproject.${settingKey}`);
+    }
   }
 
   private async handleExpiredKey(provider: "claude" | "openai"): Promise<void> {
@@ -98,30 +126,6 @@ export class AIService {
     );
     if (choice === "Set New Key") {
       vscode.commands.executeCommand("planmyproject.setApiKey");
-    }
-  }
-
-  private async warnApiKeyInSettings(provider: "claude" | "openai"): Promise<void> {
-    const suppressKey = `pmp.suppressApiKeySettingsWarning.${provider}`;
-    if (this.context.globalState.get<boolean>(suppressKey)) { return; }
-
-    const settingName = provider === "claude" ? "claudeApiKey" : "openaiApiKey";
-    const choice = await vscode.window.showWarningMessage(
-      `PlanMyProject: Your ${provider} API key is stored in settings.json ` +
-      `(planmyproject.${settingName}). If this file is committed to VCS, your key is exposed. ` +
-      `Remove the setting and use "PlanMyProject: Set API Key" to store it securely instead.`,
-      "Open Settings",
-      "Set API Key Now",
-      "Don't Show Again"
-    );
-
-    if (choice === "Open Settings") {
-      vscode.commands.executeCommand("workbench.action.openSettings",
-        `planmyproject.${settingName}`);
-    } else if (choice === "Set API Key Now") {
-      vscode.commands.executeCommand("planmyproject.setApiKey");
-    } else if (choice === "Don't Show Again") {
-      await this.context.globalState.update(suppressKey, true);
     }
   }
 

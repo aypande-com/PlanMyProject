@@ -32,3 +32,6 @@ jobs:
 
       - name: Feature coverage check
         run: npm run check:coverage
+
+      - name: Settings scope check
+        run: npm run check:settings-scope

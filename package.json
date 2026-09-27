@@ -323,33 +323,38 @@
       "properties": {
         "planmyproject.aiProvider": {
           "type": "string",
+          "scope": "machine",
           "enum": [
             "copilot",
             "claude",
             "openai"
           ],
           "default": "copilot",
-          "description": "AI provider used by PlanMyProject."
+          "description": "AI provider used by PlanMyProject. Machine-scoped (P0-D1/§12.4): a workspace should not be able to silently redirect a user's prompts to a different provider than the one they configured."
         },
         "planmyproject.claudeApiKey": {
           "type": "string",
+          "scope": "application",
           "default": "",
           "markdownDeprecationMessage": "**Deprecated.** Storing API keys in settings risks VCS exposure. Use the **PlanMyProject: Set API Key** command instead.",
-          "description": "Anthropic Claude API key. Use 'PlanMyProject: Set API Key' command for secure storage."
+          "description": "Anthropic Claude API key. Use 'PlanMyProject: Set API Key' command for secure storage. Application-scoped (P0-D1/§12.4) and one-way migrated to secret storage the first time it is read."
         },
         "planmyproject.openaiApiKey": {
           "type": "string",
+          "scope": "application",
           "default": "",
           "markdownDeprecationMessage": "**Deprecated.** Storing API keys in settings risks VCS exposure. Use the **PlanMyProject: Set API Key** command instead.",
-          "description": "OpenAI API key. Use 'PlanMyProject: Set API Key' command for secure storage."
+          "description": "OpenAI API key. Use 'PlanMyProject: Set API Key' command for secure storage. Application-scoped (P0-D1/§12.4) and one-way migrated to secret storage the first time it is read."
         },
         "planmyproject.sendFileContentsToAI": {
           "type": "boolean",
+          "scope": "machine",
           "default": false,
-          "description": "Global default for sending linked file contents to AI prompts."
+          "description": "Global default for sending linked file contents to AI prompts. Machine-scoped (P0-D1/§12.4): a workspace cannot use this to turn on file egress a user has not opted into."
         },
         "planmyproject.defaultTaskFileSendPolicy": {
           "type": "string",
+          "scope": "machine",
           "enum": [
             "global",
             "always",
@@ -357,71 +362,83 @@
             "ask"
           ],
           "default": "global",
-          "description": "Default per-task file send policy for new tasks."
+          "description": "Default per-task file send policy for new tasks. Machine-scoped (P0-D1/§12.4): a workspace cannot use this to default new tasks to always sending file contents."
         },
         "planmyproject.scanner.extractSignatures": {
           "type": "boolean",
+          "scope": "window",
           "default": true,
           "description": "Extract function/class signatures during workspace scan."
         },
         "planmyproject.scanner.maxFilesScanned": {
           "type": "number",
+          "scope": "window",
           "default": 500,
           "minimum": 50,
           "description": "Maximum number of files included in scan results."
         },
         "planmyproject.scanner.maxFileSizeKb": {
           "type": "number",
+          "scope": "window",
           "default": 50,
           "minimum": 1,
           "description": "Maximum file size in KB for signature extraction."
         },
         "planmyproject.autoRescanOnImplement": {
           "type": "boolean",
+          "scope": "window",
           "default": true,
           "description": "Automatically run workspace scan after successful task implementation."
         },
         "planmyproject.confidenceThreshold": {
           "type": "number",
+          "scope": "window",
           "default": 0.5,
           "minimum": 0,
           "maximum": 1,
-          "description": "Minimum confidence required to auto-commit AI-generated tasks."
+          "description": "Minimum confidence required to auto-commit AI-generated tasks. A workspace value may only raise this threshold, never lower it below the user's own value (P0-D1/§12.4, enforced in P0-D4)."
         },
         "planmyproject.researchGate": {
           "type": "boolean",
+          "scope": "window",
           "default": true,
-          "description": "Block implementation queue items until research/decision dependencies are done."
+          "description": "Block implementation queue items until research/decision dependencies are done. A workspace may only turn this on if the user has it off, never turn it off if the user has it on (P0-D1/§12.4, enforced in P0-D4)."
         },
         "planmyproject.debate.archiveAfterDays": {
           "type": "number",
+          "scope": "window",
           "default": 90,
           "minimum": 1,
           "description": "Archive debate entries older than this number of days."
         },
         "planmyproject.planFileName": {
           "type": "string",
+          "scope": "window",
           "default": "planmyproject.md",
           "description": "Plan file name in workspace root."
         },
         "planmyproject.showRationaleInline": {
           "type": "boolean",
+          "scope": "window",
           "default": true,
           "description": "Write AI-generated rationale lines below tasks in the plan file."
         },
         "planmyproject.gitignorePmpDir": {
           "type": "boolean",
+          "scope": "window",
           "default": true,
           "description": "Offer .gitignore updates for scanner cache path under .pmp/."
         },
         "planmyproject.scanner.cacheTtlMinutes": {
           "type": "number",
+          "scope": "window",
           "default": 5,
           "minimum": 0,
           "description": "How many minutes a workspace scan result is considered fresh. Set to 0 to always rescan before AI operations."
         },
         "planmyproject.requireAiConsent": {
           "type": "string",
+          "scope": "machine",
           "enum": [
             "always",
             "first-per-session",
@@ -433,7 +450,7 @@
             "Never prompt — send context to AI without confirmation."
           ],
           "default": "first-per-session",
-          "description": "Controls when PlanMyProject asks for confirmation before sending context to the AI provider."
+          "description": "Controls when PlanMyProject asks for confirmation before sending context to the AI provider. Machine-scoped (P0-D1/§12.4): a workspace cannot use this to turn off consent prompts a user has enabled."
         }
       }
     }
@@ -450,6 +467,7 @@
     "build": "node ./scripts/update-readme-build-status.js",
     "build:status": "npm run build",
     "check:coverage": "node scripts/check-feature-coverage.js",
+    "check:settings-scope": "node scripts/check-settings-scope.js",
     "verify": "npm run build",
     "package": "npx @vscode/vsce package --no-yarn --no-dependencies",
     "publish:vsce": "npx @vscode/vsce publish --no-yarn --no-dependencies"
