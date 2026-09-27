@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addTask, createEmptyPlanDocument, createTaskNode } from "../src/model";
+import { addTask, createEmptyPlanDocument, createTaskNode, getTaskBlockReason } from "../src/model";
 import { buildExecutionQueue } from "../src/queue";
 import { parsePlanMarkdown, serializePlanMarkdown } from "../src/parser";
 
@@ -113,4 +113,38 @@ test("an unresolved dependency stays blocked across a full serialize/parse round
   const unblockedPlan = parsePlanMarkdown(unblockedMarkdown).plan;
   const finalQueue = buildExecutionQueue(unblockedPlan, { researchGate: true });
   assert.equal(finalQueue.implementationReady.map((t) => t.id).includes("T0003"), true, "T0003 must be ready once its dependency is done");
+});
+
+// P0-B3 (U6): research-gate blocking specifically, via a sibling relationship
+// with no explicit dependsOn edge - distinct from U4's dependency-edge case,
+// and the exact path QueueBuilder now short-circuits with a precomputed set
+// (buildUnresolvedResearchParentIds) instead of scanning siblings per task.
+test("research-gate blocking (no dependsOn edge) survives a round trip and clears when research completes", () => {
+  const plan = createEmptyPlanDocument();
+
+  const root = createTaskNode({ id: "T0001", title: "Auth", type: "milestone" });
+  const research = createTaskNode({ id: "T0002", title: "Evaluate token strategy", type: "research", parentId: "T0001" });
+  const implementation = createTaskNode({ id: "T0003", title: "Implement middleware", type: "implementation", parentId: "T0001" });
+  // Deliberately no dependsOn edge - this must block on the research-gate
+  // reason alone, via sibling status, not a dependency edge.
+
+  addTask(plan, root);
+  addTask(plan, research);
+  addTask(plan, implementation);
+
+  const beforeReason = getTaskBlockReason(plan, "T0003", true);
+  assert.equal(beforeReason, "research-gate");
+
+  const roundTripped = parsePlanMarkdown(serializePlanMarkdown(plan)).plan;
+  assert.deepEqual(roundTripped.tasks["T0003"].dependsOn, [], "no dependsOn edge should exist");
+
+  const afterReason = getTaskBlockReason(roundTripped, "T0003", true);
+  assert.equal(afterReason, "research-gate", "must still be blocked by research-gate, not silently unblocked, after the round trip");
+
+  const blockedQueue = buildExecutionQueue(roundTripped, { researchGate: true });
+  assert.equal(blockedQueue.blocked.map((t) => t.id).includes("T0003"), true);
+
+  roundTripped.tasks["T0002"].status = "done";
+  const clearedQueue = buildExecutionQueue(roundTripped, { researchGate: true });
+  assert.equal(clearedQueue.implementationReady.map((t) => t.id).includes("T0003"), true, "must be ready once the sibling research task is done");
 });

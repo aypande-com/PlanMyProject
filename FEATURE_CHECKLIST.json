@@ -118,5 +118,23 @@
     "feature": "Unresolved dependency stays blocked across a serialize/parse round trip (P0-B2)",
     "testFile": "test/queue.test.ts",
     "testName": "an unresolved dependency stays blocked across a full serialize/parse round trip"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Research-gate blocking (sibling, no dependsOn edge) survives a round trip (P0-B3)",
+    "testFile": "test/queue.test.ts",
+    "testName": "research-gate blocking (no dependsOn edge) survives a round trip and clears when research completes"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Implement-context ancestor chain survives a round trip (P0-B3)",
+    "testFile": "test/task-command.test.ts",
+    "testName": "collectAncestorChain returns the full parent chain in root-to-leaf order after a round trip"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Implement-context research conclusions (dependency + sibling notes) survive a round trip (P0-B3)",
+    "testFile": "test/task-command.test.ts",
+    "testName": "collectResearchConclusions picks up dependency and sibling notes after a round trip"
   }
 ]
