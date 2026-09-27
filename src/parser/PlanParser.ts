@@ -219,7 +219,9 @@ function parseGoals(lines: string[], plan: PlanDocument, goalsHeadingLine: numbe
 
     const metaLine = lines[index + 1]?.trim() ?? "";
     if (metaLine.startsWith("<!--") && metaLine.includes("pmp:goal-meta:")) {
-      const metadata = parseInlineMetadata(metaLine.replace(/^<!--\s*|\s*-->$/g, ""));
+      const metadata = parseInlineMetadata(
+        metaLine.replace(/^<!--\s*|\s*-->$/g, "").replace(/^pmp:goal-meta:/, "")
+      );
       goal.successCriteria = parseStringArray(metadata.criteria);
       goal.constraints = parseStringArray(metadata.constraints);
       goal.outOfScope = parseStringArray(metadata["out-of-scope"]);
@@ -355,8 +357,12 @@ function applyTaskMetadata(task: TaskNode, metadata: Record<string, string>): vo
   task.archivedDebatePath = normalizeNullableString(metadata.archivedDebatePath);
 }
 
+// Callers are responsible for stripping their own comment prefix (e.g. "pmp:"
+// or "pmp:goal-meta:") before calling this. Do not slice on the first colon
+// here - field values (createdAt, completedAt) are ISO-8601 timestamps and
+// contain colons, so a positional colon-slice silently drops every field
+// serialized before the timestamp instead of stripping a prefix (P0-A1).
 function parseInlineMetadata(raw: string): Record<string, string> {
-  const payload = raw.includes(":") ? raw.slice(raw.indexOf(":") + 1) : raw;
   const result: Record<string, string> = {};
   const parts: string[] = [];
 
@@ -364,7 +370,7 @@ function parseInlineMetadata(raw: string): Record<string, string> {
   let bracketDepth = 0;
   let quote: "'" | '"' | null = null;
 
-  for (const char of payload) {
+  for (const char of raw) {
     if (quote) {
       current += char;
       if (char === quote) {

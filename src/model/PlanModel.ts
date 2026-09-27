@@ -170,7 +170,22 @@ export function markTaskStatus(plan: PlanDocument, taskId: string, status: TaskS
   recomputeDerivedStatuses(plan);
 }
 
-export function getTaskBlockReason(plan: PlanDocument, taskId: string, researchGate: boolean): TaskBlockReason | undefined {
+// `unresolvedResearchParents`, when supplied, is a set of parentIds known (by
+// buildUnresolvedResearchParentIds) to have an unresolved research/decision
+// child, letting a caller that checks many tasks under the same plan skip the
+// O(children) sibling scan below in favor of an O(1) set lookup. It is
+// optional and callers that omit it (the default) get identical behavior to
+// before - only QueueBuilder's bulk path passes it today. Found while
+// verifying P0's <10ms @ 2,000 tasks budget: buildExecutionQueue calls this
+// once per leaf task, and a sibling scan that is O(children) turns that into
+// O(n^2) once many leaves share a parent. The other call sites (serialize,
+// tree view, single-task lookups) still do the full scan - flagged for U6.
+export function getTaskBlockReason(
+  plan: PlanDocument,
+  taskId: string,
+  researchGate: boolean,
+  unresolvedResearchParents?: Set<string>
+): TaskBlockReason | undefined {
   const task = plan.tasks[taskId];
   if (!task) {
     return undefined;
@@ -187,16 +202,22 @@ export function getTaskBlockReason(plan: PlanDocument, taskId: string, researchG
     return "debate-thread";
   }
 
-  if (researchGate && task.type === "implementation") {
-    const parent = task.parentId ? plan.tasks[task.parentId] : undefined;
-    if (parent) {
-      for (const siblingId of parent.children) {
-        if (siblingId === task.id) {
-          continue;
-        }
-        const sibling = plan.tasks[siblingId];
-        if (sibling && isResearchLikeTask(sibling.type) && sibling.status !== "done") {
-          return "research-gate";
+  if (researchGate && task.type === "implementation" && task.parentId) {
+    if (unresolvedResearchParents) {
+      if (unresolvedResearchParents.has(task.parentId)) {
+        return "research-gate";
+      }
+    } else {
+      const parent = plan.tasks[task.parentId];
+      if (parent) {
+        for (const siblingId of parent.children) {
+          if (siblingId === task.id) {
+            continue;
+          }
+          const sibling = plan.tasks[siblingId];
+          if (sibling && isResearchLikeTask(sibling.type) && sibling.status !== "done") {
+            return "research-gate";
+          }
         }
       }
     }
@@ -205,8 +226,26 @@ export function getTaskBlockReason(plan: PlanDocument, taskId: string, researchG
   return undefined;
 }
 
-export function isTaskBlocked(plan: PlanDocument, taskId: string, researchGate: boolean): boolean {
-  return getTaskBlockReason(plan, taskId, researchGate) !== undefined;
+// One O(n) pass building the set of parentIds with an unresolved research or
+// decision child, for callers that need getTaskBlockReason's research-gate
+// check for every task in the plan rather than a single ad-hoc lookup.
+export function buildUnresolvedResearchParentIds(plan: PlanDocument): Set<string> {
+  const parentIds = new Set<string>();
+  for (const task of Object.values(plan.tasks)) {
+    if (task.parentId && isResearchLikeTask(task.type) && task.status !== "done") {
+      parentIds.add(task.parentId);
+    }
+  }
+  return parentIds;
+}
+
+export function isTaskBlocked(
+  plan: PlanDocument,
+  taskId: string,
+  researchGate: boolean,
+  unresolvedResearchParents?: Set<string>
+): boolean {
+  return getTaskBlockReason(plan, taskId, researchGate, unresolvedResearchParents) !== undefined;
 }
 
 export function duplicatePlanDocument(plan: PlanDocument): PlanDocument {

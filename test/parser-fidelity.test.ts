@@ -34,6 +34,9 @@ test("task metadata round-trips every field individually through serialize/parse
   task.dependsOn = ["T0002"];
   task.linkedFiles = ["src/scanner/WorkspaceScanner.ts", "src/scanner/SignatureExtractor.ts"];
   task.notes = "Prefer the existing scanner cache over a fresh crawl";
+  // recomputeDerivedStatuses nulls completedAt for any leaf task that is not
+  // status "done" - status must be set for completedAt to round-trip at all.
+  task.status = "done";
   task.completedAt = "2026-02-01T00:00:00.000Z";
   task.archivedDebatePath = ".pmp/debate-archive/T0003.json";
 
