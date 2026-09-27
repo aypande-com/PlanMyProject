@@ -304,5 +304,35 @@
     "feature": "CodeLens exposes Infer as a secondary action next to Scan on v2 plans (P4-B2)",
     "testFile": "test/codelens-provider.test.ts",
     "testName": "v2 plan: CodeLens provides Plan, Debate, Implement, Scan, and Infer lenses per task"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Response parser drops drafts with a blank title (P4-D2)",
+    "testFile": "test/response-parser.test.ts",
+    "testName": "parseTaskGenerationResponse drops drafts with a blank title"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Response parser clamps confidence to [0, 1] (P4-D2)",
+    "testFile": "test/response-parser.test.ts",
+    "testName": "parseTaskGenerationResponse clamps confidence to [0, 1]"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Response parser rejects an unknown task type rather than defaulting it (P4-D2)",
+    "testFile": "test/response-parser.test.ts",
+    "testName": "parseTaskGenerationResponse rejects an unknown type instead of defaulting it"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Response parser downgrades confidence for an out-of-range goalCriterionIndex (P4-D1)",
+    "testFile": "test/response-parser.test.ts",
+    "testName": "parseTaskGenerationResponse downgrades confidence for an out-of-range goalCriterionIndex"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Response parser downgrades every draft when the goal has zero criteria (P4-D1)",
+    "testFile": "test/response-parser.test.ts",
+    "testName": "parseTaskGenerationResponse downgrades every task when the goal has no criteria at all"
   }
 ]

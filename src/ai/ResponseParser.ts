@@ -22,7 +22,20 @@ export interface ImplementationResponse {
 
 const VALID_TYPES = new Set<TaskType>(["research", "implementation", "decision", "milestone"]);
 
-export function parseTaskGenerationResponse(rawText: string): GeneratedTaskSet {
+export interface ParseTaskGenerationOptions {
+  // P4-D1: PromptBuilder tells the AI "every task must reference which goal
+  // criterion it serves" via goalCriterionIndex, but nothing checked the
+  // returned index was actually within the real goal's successCriteria
+  // array - any finite number passed through unchecked. When provided, an
+  // out-of-range index (including when the goal has no criteria, or none
+  // was resolved at all) downgrades confidence by 0.2 rather than rejecting
+  // the draft outright - it is usually a minor miscount, not a sign the rest
+  // of the task is wrong, and the existing confidence-threshold review flow
+  // already exists to catch exactly this kind of uncertainty.
+  goalCriteriaCount?: number;
+}
+
+export function parseTaskGenerationResponse(rawText: string, options?: ParseTaskGenerationOptions): GeneratedTaskSet {
   const jsonText = extractJsonObject(rawText);
   if (!jsonText) {
     throw new Error("AI response did not contain a JSON object.");
@@ -53,17 +66,25 @@ export function parseTaskGenerationResponse(rawText: string): GeneratedTaskSet {
       continue;
     }
 
-    const confidence = normalizeConfidence(entry.confidence);
+    let confidence = normalizeConfidence(entry.confidence);
     const dependsOnTitles = toStringArray(entry.dependsOnTitles);
     const linkedFiles = toStringArray(entry.linkedFiles)
       .map((value) => normalizeWorkspaceRelativePath(value))
       .filter((value): value is string => Boolean(value));
 
+    const goalCriterionIndex = Number.isFinite(Number(entry.goalCriterionIndex)) ? Number(entry.goalCriterionIndex) : 0;
+    if (options?.goalCriteriaCount !== undefined) {
+      const isValidIndex = Number.isInteger(goalCriterionIndex) && goalCriterionIndex >= 0 && goalCriterionIndex < options.goalCriteriaCount;
+      if (!isValidIndex) {
+        confidence = Math.max(0, confidence - 0.2);
+      }
+    }
+
     tasks.push({
       title,
       type: type as TaskType,
       rationale: typeof entry.rationale === "string" ? entry.rationale.trim() : "",
-      goalCriterionIndex: Number.isFinite(Number(entry.goalCriterionIndex)) ? Number(entry.goalCriterionIndex) : 0,
+      goalCriterionIndex,
       confidence,
       dependsOnTitles,
       linkedFiles

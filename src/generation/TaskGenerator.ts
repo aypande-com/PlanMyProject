@@ -56,7 +56,7 @@ export class TaskGenerator {
       onChunk: input.onChunk
     });
 
-    const parsed = parseTaskGenerationResponse(response.text);
+    const parsed = parseTaskGenerationResponse(response.text, { goalCriteriaCount: goal?.successCriteria.length ?? 0 });
     const deduped = dedupeDrafts(parsed.tasks, existingChildren.map((task) => task.title));
 
     const threshold = Math.min(1, Math.max(0, input.confidenceThreshold));
