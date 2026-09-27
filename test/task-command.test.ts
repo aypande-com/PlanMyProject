@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import * as vscode from "vscode";
 import {
   describeTaskBlockMessage,
   TaskCommandService,
   type TaskCommandContext,
   type TaskCommandServices
 } from "../src/controller/TaskCommandService";
-import { addTask, createEmptyPlanDocument, createTaskNode, type PlanDocument } from "../src/model";
+import { addTask, createEmptyPlanDocument, createTaskNode, type PlanDocument, type TaskNode } from "../src/model";
 import { parsePlanMarkdown, serializePlanMarkdown } from "../src/parser";
 
 // collectAncestorChain and collectResearchConclusions are private - they take
@@ -104,4 +105,61 @@ test("collectResearchConclusions picks up dependency and sibling notes after a r
     new Set(["T0002: Use short-lived JWTs with rotation", "T0004: Use Postgres, not Mongo"]),
     "must include the done dependency's notes and the done sibling's notes, and exclude the unfinished sibling"
   );
+});
+
+// P0-D2: collectLinkedFileSnapshots is the one method here that touches
+// vscode.workspace.fs and getConfiguration, so it needs the fs/workspaceFolders
+// mock added to test/shims/vscode.js for this unit (the same gap flagged for
+// U6 - closing enough of it here to test the egress refusal this unit adds).
+
+function createServiceForLinkedFileSnapshots(): TaskCommandService {
+  const ctx: Partial<TaskCommandContext> = {
+    getConfiguration: () => vscode.workspace.getConfiguration("planmyproject")
+  };
+  return new TaskCommandService(ctx as unknown as TaskCommandContext, {} as unknown as TaskCommandServices);
+}
+
+function collectLinkedFileSnapshots(service: TaskCommandService, task: TaskNode) {
+  return (
+    service as unknown as {
+      collectLinkedFileSnapshots: (task: TaskNode) => Promise<{ snapshots: Array<{ path: string; content: string }>; refused: string[] }>;
+    }
+  ).collectLinkedFileSnapshots(task);
+}
+
+test.beforeEach(() => {
+  (vscode as unknown as { __resetVscodeMockState: () => void }).__resetVscodeMockState();
+  (vscode as unknown as { __setWorkspaceFolder: (fsPath: string) => void }).__setWorkspaceFolder("/workspace");
+});
+
+test("collectLinkedFileSnapshots refuses SECRET_BEARING files on egress and names them, sends the rest", async () => {
+  (vscode as unknown as { __setMockFile: (p: string, c: string) => void }).__setMockFile(".env", "SECRET=abc123");
+  (vscode as unknown as { __setMockFile: (p: string, c: string) => void }).__setMockFile("src/foo.ts", "export const x = 1;");
+  (vscode as unknown as { __setMockFile: (p: string, c: string) => void }).__setMockFile("package.json", '{"name":"x"}');
+
+  const task = createTaskNode({ id: "T0001", title: "Implement foo", type: "implementation", fileSendPolicy: "always" });
+  task.linkedFiles = [".env", "src/foo.ts", "package.json"];
+
+  const service = createServiceForLinkedFileSnapshots();
+  const { snapshots, refused } = await collectLinkedFileSnapshots(service, task);
+
+  assert.deepEqual(refused, [".env"], "only the secret-bearing path is refused");
+  assert.deepEqual(
+    snapshots.map((s) => s.path),
+    ["src/foo.ts", "package.json"],
+    "build-metadata (package.json) is not refused - it is fine to send as AI context, unlike secret-bearing paths"
+  );
+});
+
+test("collectLinkedFileSnapshots sends nothing when the task's fileSendPolicy is never", async () => {
+  (vscode as unknown as { __setMockFile: (p: string, c: string) => void }).__setMockFile("src/foo.ts", "export const x = 1;");
+
+  const task = createTaskNode({ id: "T0001", title: "Implement foo", type: "implementation", fileSendPolicy: "never" });
+  task.linkedFiles = ["src/foo.ts"];
+
+  const service = createServiceForLinkedFileSnapshots();
+  const { snapshots, refused } = await collectLinkedFileSnapshots(service, task);
+
+  assert.deepEqual(snapshots, []);
+  assert.deepEqual(refused, []);
 });

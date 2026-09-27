@@ -1,7 +1,12 @@
 import * as path from "path";
 import { promises as fs } from "fs";
 
-const SENSITIVE_BASENAMES = new Set([
+// P0-D2: two distinct classes, deliberately not one "sensitive" bucket.
+// BUILD_METADATA is project configuration - not secret, but AI-suggested
+// changes to it are worth a confirmation before writing. SECRET_BEARING is
+// content that may contain a live credential - refused outright on egress,
+// no override (see isSecretBearingPath / collectLinkedFileSnapshots).
+const BUILD_METADATA_BASENAMES = new Set([
   "package.json",
   "package-lock.json",
   "pnpm-lock.yaml",
@@ -13,6 +18,8 @@ const SENSITIVE_BASENAMES = new Set([
   ".gitattributes",
   ".editorconfig"
 ]);
+
+const SECRET_BEARING_DIRECTORY_PREFIXES = [".git/", ".vscode/", ".github/", ".devcontainer/"];
 
 export function normalizeWorkspaceRelativePath(input: string): string | undefined {
   const trimmed = input.trim();
@@ -33,19 +40,15 @@ export function normalizeWorkspaceRelativePath(input: string): string | undefine
   return normalized;
 }
 
-export function isSensitiveWorkspacePath(input: string): boolean {
+// Refuse outright on egress (no user override) - see collectLinkedFileSnapshots.
+export function isSecretBearingPath(input: string): boolean {
   const normalized = normalizeWorkspaceRelativePath(input);
   if (!normalized) {
     return true;
   }
 
   const lower = normalized.toLowerCase();
-  if (
-    lower.startsWith(".git/")
-    || lower.startsWith(".vscode/")
-    || lower.startsWith(".github/")
-    || lower.startsWith(".devcontainer/")
-  ) {
+  if (SECRET_BEARING_DIRECTORY_PREFIXES.some((prefix) => lower.startsWith(prefix))) {
     return true;
   }
 
@@ -53,7 +56,20 @@ export function isSensitiveWorkspacePath(input: string): boolean {
   if (basename.startsWith(".env")) {
     return true;
   }
-  if (SENSITIVE_BASENAMES.has(basename)) {
+
+  return false;
+}
+
+// Warn-and-allow before an AI-suggested write - see the sensitiveTargets
+// check in TaskCommandService.implementTask.
+export function isBuildMetadataPath(input: string): boolean {
+  const normalized = normalizeWorkspaceRelativePath(input);
+  if (!normalized) {
+    return false;
+  }
+
+  const basename = path.posix.basename(normalized.toLowerCase());
+  if (BUILD_METADATA_BASENAMES.has(basename)) {
     return true;
   }
   if (/^tsconfig(?:\..+)?\.json$/.test(basename)) {
@@ -61,6 +77,14 @@ export function isSensitiveWorkspacePath(input: string): boolean {
   }
 
   return false;
+}
+
+// General "needs a confirmation somewhere" check, kept for the write-path
+// gate which still treats both classes the same way it always has (warn,
+// allow on confirmation). Egress uses isSecretBearingPath directly instead,
+// since BUILD_METADATA content is fine to send as AI context.
+export function isSensitiveWorkspacePath(input: string): boolean {
+  return isSecretBearingPath(input) || isBuildMetadataPath(input);
 }
 
 export async function resolveSafeTargetPath(rootPath: string, relativePath: string): Promise<string> {

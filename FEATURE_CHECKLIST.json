@@ -154,5 +154,29 @@
     "feature": "API key migration runs at most once, no repeat notification (P0-D1)",
     "testFile": "test/ai-service.test.ts",
     "testName": "getApiKey does not re-migrate or re-notify once the setting has been cleared"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Secret-bearing vs build-metadata path classification (P0-D2)",
+    "testFile": "test/path-safety.test.ts",
+    "testName": "isSecretBearingPath matches only the secret-bearing class"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Build-metadata path classification excludes secret-bearing paths (P0-D2)",
+    "testFile": "test/path-safety.test.ts",
+    "testName": "isBuildMetadataPath matches only the build-metadata class"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Egress refuses secret-bearing linked files by name, sends build-metadata (P0-D2)",
+    "testFile": "test/task-command.test.ts",
+    "testName": "collectLinkedFileSnapshots refuses SECRET_BEARING files on egress and names them, sends the rest"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "fileSendPolicy never suppresses all linked-file egress before the sensitivity check runs (P0-D2)",
+    "testFile": "test/task-command.test.ts",
+    "testName": "collectLinkedFileSnapshots sends nothing when the task's fileSendPolicy is never"
   }
 ]

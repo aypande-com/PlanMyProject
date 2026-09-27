@@ -22,11 +22,19 @@ import { type DebatePanel, type DebateService, type DebateAction } from "../deba
 import { type ScanService } from "../scanner/ScanService";
 import { type ConsentService } from "../ai/ConsentService";
 import { type PlanTreeProvider } from "../ui";
-import { createTaskIdGenerator, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath } from "../util";
+import { createTaskIdGenerator, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath, isSecretBearingPath } from "../util";
 import { getWorkspaceRootUri, uriExists } from "../storage";
 
 const MAX_LINKED_FILE_CONTENT_BYTES = 45_000;
 const MAX_LINKED_FILES_IN_PROMPT = 8;
+
+interface LinkedFileSnapshotResult {
+  snapshots: Array<{ path: string; content: string }>;
+  // P0-D2: workspace-relative paths that were refused on egress because they
+  // matched a SECRET_BEARING pattern (.env*, .git/**, .vscode/**, .github/**,
+  // .devcontainer/**), named so the user knows exactly what was excluded.
+  refused: string[];
+}
 
 // ---------------------------------------------------------------------------
 // Dependency interfaces injected by PlanController
@@ -230,7 +238,13 @@ export class TaskCommandService {
 
     const ancestorChain = this.collectAncestorChain(plan, task.id);
     const conclusions = this.collectResearchConclusions(plan, task);
-    const linkedSnapshots = await this.collectLinkedFileSnapshots(task);
+    const { snapshots: linkedSnapshots, refused: refusedLinkedFiles } = await this.collectLinkedFileSnapshots(task);
+
+    if (refusedLinkedFiles.length > 0) {
+      void vscode.window.showWarningMessage(
+        `Task ${task.id}: refused to send ${refusedLinkedFiles.length} sensitive linked file(s) to AI: ${refusedLinkedFiles.join(", ")}`
+      );
+    }
 
     const prompt = buildImplementationPrompt({
       task,
@@ -242,7 +256,8 @@ export class TaskCommandService {
     if (!(await this.svc.consentService.requestConsent(`Implement task ${task.id}`, [
       `Task: [${task.id}] ${task.title}`,
       `Provider: ${this.svc.aiService.getSelectedProvider()}`,
-      `Linked files included: ${linkedSnapshots.length}`
+      `Linked files included: ${linkedSnapshots.length}`,
+      ...(refusedLinkedFiles.length > 0 ? [`Linked files refused (sensitive): ${refusedLinkedFiles.join(", ")}`] : [])
     ]))) {
       return;
     }
@@ -514,13 +529,13 @@ export class TaskCommandService {
     return result;
   }
 
-  private async collectLinkedFileSnapshots(task: TaskNode): Promise<Array<{ path: string; content: string }>> {
+  private async collectLinkedFileSnapshots(task: TaskNode): Promise<LinkedFileSnapshotResult> {
     const root = getWorkspaceRootUri();
     const config = this.ctx.getConfiguration();
     const resolvedPolicy = resolveFileSendPolicy(task.fileSendPolicy, config.get<boolean>("sendFileContentsToAI", false));
 
     if (resolvedPolicy === "dont-send") {
-      return [];
+      return { snapshots: [], refused: [] };
     }
 
     if (resolvedPolicy === "ask") {
@@ -530,13 +545,26 @@ export class TaskCommandService {
         "Skip"
       );
       if (approval !== "Send") {
-        return [];
+        return { snapshots: [], refused: [] };
       }
     }
 
+    // P0-D2: SECRET_BEARING paths (.env*, .git/**, .vscode/**, .github/**,
+    // .devcontainer/**) are refused outright on egress, with no override -
+    // unlike the write-path check below (which still warns-and-allows for the
+    // BUILD_METADATA class via isSensitiveWorkspacePath), a file that might
+    // contain a live secret should never leave the workspace just because it
+    // was added to linkedFiles, deliberately or by an imported/AI-suggested
+    // plan.
     const snapshots: Array<{ path: string; content: string }> = [];
+    const refused: string[] = [];
     const paths = task.linkedFiles.slice(0, MAX_LINKED_FILES_IN_PROMPT);
     for (const relativePath of paths) {
+      if (isSecretBearingPath(relativePath)) {
+        refused.push(relativePath);
+        continue;
+      }
+
       const uri = vscode.Uri.joinPath(root, ...relativePath.split("/"));
       if (!(await uriExists(uri))) {
         continue;
@@ -546,7 +574,7 @@ export class TaskCommandService {
       snapshots.push({ path: relativePath, content });
     }
 
-    return snapshots;
+    return { snapshots, refused };
   }
 
   private async confirmWriteToCompleteFiles(paths: string[]): Promise<boolean> {
