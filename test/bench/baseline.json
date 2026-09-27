@@ -1,0 +1,7 @@
+{
+  "queue-build-2000-tasks": {
+    "baselineMs": 25,
+    "tolerance": 2,
+    "note": "Post-U3 (rank-map + binary heap). Pre-U3 this took ~11,400ms on the same fixture. Re-measure and update this file if a change intentionally alters queue-build performance; do not raise the tolerance to make a regression pass."
+  }
+}

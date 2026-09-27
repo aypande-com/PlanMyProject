@@ -109,9 +109,9 @@
   },
   {
     "section": "1. Core Architecture",
-    "feature": "Queue build stays within budget at 2,000 tasks with edges intact (P0-A2)",
+    "feature": "Queue build stays within a committed baseline at 2,000 tasks with edges intact (P0-A2)",
     "testFile": "test/bench/queue.bench.ts",
-    "testName": "buildExecutionQueue completes within ${BUDGET_MS}ms at ${TASK_COUNT} tasks with edges intact (P0-A2)"
+    "testName": "${BENCH_NAME}: buildExecutionQueue stays within the committed baseline at ${TASK_COUNT} tasks with edges intact (P0-A2)"
   },
   {
     "section": "1. Core Architecture",

@@ -446,6 +446,7 @@
     "test": "npm run test:build && NODE_PATH=./test/shims node --test \"out-test/test/**/*.test.js\"",
     "test:integration": "npm run test:build && NODE_PATH=./test/shims node --test out-test/test/integration/*.test.js",
     "test:coverage": "npm run test:build && NODE_PATH=./test/shims node --test --experimental-test-coverage \"out-test/test/**/*.test.js\"",
+    "bench": "npm run test:build && NODE_PATH=./test/shims node --test \"out-test/test/bench/**/*.bench.js\"",
     "build": "node ./scripts/update-readme-build-status.js",
     "build:status": "npm run build",
     "check:coverage": "node scripts/check-feature-coverage.js",

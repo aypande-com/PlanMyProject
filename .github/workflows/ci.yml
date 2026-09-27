@@ -27,5 +27,8 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Bench
+        run: npm run bench
+
       - name: Feature coverage check
         run: npm run check:coverage
