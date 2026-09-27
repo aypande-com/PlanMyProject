@@ -274,5 +274,23 @@
     "feature": "Symlink escape blocked at the write-path safety check, including nested escapes (P0-D4)",
     "testFile": "test/security.test.ts",
     "testName": "resolveSafeTargetPath blocks a write through a symlink that escapes the workspace root"
+  },
+  {
+    "section": "3. Workspace Analysis",
+    "feature": "Scan delta detects a linked file newly present post-implement (P4-B1)",
+    "testFile": "test/scan-delta.test.ts",
+    "testName": "detects a linked file newly present in the post-implement scan"
+  },
+  {
+    "section": "3. Workspace Analysis",
+    "feature": "Scan delta detects a linked file's signature change post-implement (P4-B1)",
+    "testFile": "test/scan-delta.test.ts",
+    "testName": "detects a linked file whose signature changed between scans"
+  },
+  {
+    "section": "3. Workspace Analysis",
+    "feature": "Scan delta does not false-positive on an unchanged linked file (P4-B1)",
+    "testFile": "test/scan-delta.test.ts",
+    "testName": "does not report a linked file with no change between scans"
   }
 ]

@@ -5,3 +5,4 @@ export * from "./FeatureInferrer";
 export * from "./LanguageDetector";
 export * from "./ModuleGrouper";
 export * from "./IgnoreMatcher";
+export * from "./ScanDelta";

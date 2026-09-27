@@ -20,6 +20,7 @@ import { type TaskGenerator } from "../generation";
 import { type ResearchIndex } from "../research";
 import { type DebatePanel, type DebateService, type DebateAction } from "../debate";
 import { type ScanService } from "../scanner/ScanService";
+import { findLinkedFilesWithScanDelta } from "../scanner/ScanDelta";
 import { type ConsentService } from "../ai/ConsentService";
 import { type PlanTreeProvider } from "../ui";
 import {
@@ -271,6 +272,12 @@ export class TaskCommandService {
     }
 
     await this.ctx.withActiveRequest(task.id, async (token) => {
+      // P4-B1: snapshotted before the write so it can be diffed against the
+      // post-implement rescan below - this is what lets a scan delta on
+      // task.linkedFiles corroborate completion when the AI's own
+      // taskCompleted flag says otherwise.
+      const preScan = this.svc.scanService.getScan();
+
       const response = await this.svc.aiService.generateText(prompt, {
         cancellationToken: token,
         onChunk: async () => {
@@ -317,6 +324,25 @@ export class TaskCommandService {
 
       if (this.ctx.getConfiguration().get<boolean>("autoRescanOnImplement", true)) {
         await this.ctx.refreshScan({ quiet: true });
+
+        // P4-B1: only relevant when the AI's own report left the task
+        // in-progress - if taskCompleted already marked it done above, a
+        // second confirmation for the same outcome is just noise.
+        if (!parsed.taskCompleted && task.linkedFiles.length > 0) {
+          const postScan = this.svc.scanService.getScan();
+          const changedLinkedFiles = findLinkedFilesWithScanDelta(preScan, postScan, task.linkedFiles);
+          if (changedLinkedFiles.length > 0) {
+            const confirmation = await vscode.window.showInformationMessage(
+              `Scan detected changes to linked file(s) for ${task.id}: ${changedLinkedFiles.join(", ")}. Mark ${task.id} complete?`,
+              "Mark Complete",
+              "Not Yet"
+            );
+            if (confirmation === "Mark Complete") {
+              markTaskStatus(plan as PlanDocument, task.id, "done");
+              await this.ctx.persistAndRefresh();
+            }
+          }
+        }
       }
 
       void vscode.window.showInformationMessage(`Implemented ${task.id}: wrote ${parsed.changes.length} file(s).`);
