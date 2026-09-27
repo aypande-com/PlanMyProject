@@ -1,5 +1,31 @@
 "use strict";
 
+const fs = require("node:fs");
+const path = require("node:path");
+
+// Lazily loads contributes.configuration.properties from the real
+// package.json, so the mock can enforce the same scope semantics real
+// VS Code does: `application`/`machine` settings are never overridable by a
+// workspace, full stop, at the configuration-resolution level - not just a
+// Settings UI restriction. Without this, the mock would let a workspace value
+// win regardless of declared scope (plain "last write wins" precedence),
+// which is exactly the behavior P0-D1/P0-D4 exist to rule out.
+let declaredScopesCache;
+function getDeclaredScope(section, key) {
+  if (!declaredScopesCache) {
+    try {
+      const pkgPath = path.join(__dirname, "..", "..", "package.json");
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+      declaredScopesCache = pkg?.contributes?.configuration?.properties ?? {};
+    } catch {
+      declaredScopesCache = {};
+    }
+  }
+  return declaredScopesCache[`${section}.${key}`]?.scope;
+}
+
+const NON_OVERRIDABLE_SCOPES = new Set(["application", "machine"]);
+
 class EventEmitter {
   constructor() {
     this._listeners = new Set();
@@ -116,6 +142,14 @@ class MockWorkspaceConfiguration {
     if (!entry) {
       return defaultValue;
     }
+
+    const scope = getDeclaredScope(this._section, key);
+    if (NON_OVERRIDABLE_SCOPES.has(scope)) {
+      // application/machine: workspace and workspaceFolder values are not
+      // read at all, not even as a fallback - only global (user) counts.
+      return entry.globalValue !== undefined ? entry.globalValue : defaultValue;
+    }
+
     if (entry.workspaceFolderValue !== undefined) return entry.workspaceFolderValue;
     if (entry.workspaceValue !== undefined) return entry.workspaceValue;
     if (entry.globalValue !== undefined) return entry.globalValue;

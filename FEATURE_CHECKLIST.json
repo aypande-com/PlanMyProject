@@ -238,5 +238,41 @@
     "feature": "AIService wires masking options to planmyproject.masking.* settings, not a hardcoded false (P0-D3)",
     "testFile": "test/ai-service.test.ts",
     "testName": "resolveMaskingOptions reflects planmyproject.masking.* settings"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "I12: a workspace value cannot weaken researchGate below the user's value (P0-D4)",
+    "testFile": "test/security.test.ts",
+    "testName": "a workspace value cannot weaken researchGate below what the user has set"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "I12: a workspace value cannot lower confidenceThreshold below the user's value (P0-D4)",
+    "testFile": "test/security.test.ts",
+    "testName": "a workspace value cannot lower confidenceThreshold below what the user has set"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Machine-scoped settings (requireAiConsent, sendFileContentsToAI, aiProvider, defaultTaskFileSendPolicy) reject workspace overrides (P0-D4)",
+    "testFile": "test/security.test.ts",
+    "testName": "a workspace-set value for the machine-scoped setting ${key} has no effect"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Application-scoped claudeApiKey rejects a workspace override on the merged value (P0-D4)",
+    "testFile": "test/security.test.ts",
+    "testName": "a workspace-set value for the application-scoped claudeApiKey has no effect on the merged value"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "P0-D4 consolidated: .env in linkedFiles refused on egress and named (security regression suite)",
+    "testFile": "test/security.test.ts",
+    "testName": ".env reached through linkedFiles is refused on egress and named to the user"
+  },
+  {
+    "section": "7. Security / Policy",
+    "feature": "Symlink escape blocked at the write-path safety check, including nested escapes (P0-D4)",
+    "testFile": "test/security.test.ts",
+    "testName": "resolveSafeTargetPath blocks a write through a symlink that escapes the workspace root"
   }
 ]

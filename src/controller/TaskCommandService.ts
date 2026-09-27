@@ -22,7 +22,15 @@ import { type DebatePanel, type DebateService, type DebateAction } from "../deba
 import { type ScanService } from "../scanner/ScanService";
 import { type ConsentService } from "../ai/ConsentService";
 import { type PlanTreeProvider } from "../ui";
-import { createTaskIdGenerator, resolveFileSendPolicy, resolveSafeTargetPath, isSensitiveWorkspacePath, isSecretBearingPath } from "../util";
+import {
+  createTaskIdGenerator,
+  resolveFileSendPolicy,
+  resolveSafeTargetPath,
+  isSensitiveWorkspacePath,
+  isSecretBearingPath,
+  resolveStricterBooleanGate,
+  resolveStricterNumberGate
+} from "../util";
 import { getWorkspaceRootUri, uriExists } from "../storage";
 
 const MAX_LINKED_FILE_CONTENT_BYTES = 45_000;
@@ -154,7 +162,7 @@ export class TaskCommandService {
         parent: task,
         scan: this.svc.scanService.getScan(),
         knowledge,
-        confidenceThreshold: this.ctx.getConfiguration().get<number>("confidenceThreshold", 0.5),
+        confidenceThreshold: resolveStricterNumberGate(this.ctx.getConfiguration(), "confidenceThreshold", 0.5),
         includeSignatures: this.ctx.getConfiguration().get<boolean>("scanner.extractSignatures", true),
         onChunk: async () => {
           this.svc.treeProvider.setRequestStatus({
@@ -229,7 +237,7 @@ export class TaskCommandService {
       return;
     }
 
-    const researchGate = this.ctx.getConfiguration().get<boolean>("researchGate", true);
+    const researchGate = resolveStricterBooleanGate(this.ctx.getConfiguration(), "researchGate", true);
     const blockReason = getTaskBlockReason(plan, task.id, researchGate);
     if (blockReason) {
       void vscode.window.showWarningMessage(describeTaskBlockMessage(task.id, blockReason));

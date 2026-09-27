@@ -67,15 +67,22 @@ export class AIService {
     const settingKey = provider === "claude" ? "claudeApiKey" : "openaiApiKey";
 
     const configuration = vscode.workspace.getConfiguration("planmyproject");
-    const configuredSetting = configuration.get<string>(settingKey, "");
-    const normalizedSetting = configuredSetting?.trim();
+    // P0-D4 finding: claudeApiKey/openaiApiKey are application-scoped, which
+    // means configuration.get() correctly never surfaces a workspace-level
+    // value to the running extension - that is the scope protection working
+    // as intended. But the raw value can still be sitting in a committed
+    // settings.json even though nothing reads it, which is the actual risk
+    // (a secret on disk/in VCS, whether or not anything currently uses it).
+    // inspect() reports the raw per-scope values regardless of declared
+    // scope, so detection here is deliberately not routed through get().
+    const inspected = configuration.inspect<string>(settingKey);
+    const rawSetting = inspected?.workspaceFolderValue ?? inspected?.workspaceValue ?? inspected?.globalValue;
+    const normalizedSetting = rawSetting?.trim();
 
-    // One-way migration (P0-D1): a key found in settings.json is moved to
-    // context.secrets and the plaintext setting is cleared, at every scope it
-    // was set in - claudeApiKey/openaiApiKey are now `application`-scoped, so
-    // this is also the path that repairs a workspace settings.json left over
-    // from before that scope existed. This runs at most once per key: after
-    // the setting is cleared, later calls fall straight through to secrets.
+    // One-way migration (P0-D1): a key found at any scope is moved to
+    // context.secrets and cleared from every scope it was set in. This runs
+    // at most once per key: after the setting is cleared, later calls fall
+    // straight through to secrets.
     if (normalizedSetting) {
       await this.context.secrets.store(secretName, normalizedSetting);
       await this.clearSettingAtEveryScope(configuration, settingKey);

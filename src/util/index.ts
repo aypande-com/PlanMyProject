@@ -3,3 +3,4 @@ export * from "./FileSendPolicyResolver";
 export * from "./GoalParser";
 export * from "./PromptMasker";
 export * from "./PathSafetyChecker";
+export * from "./GateSettingResolver";

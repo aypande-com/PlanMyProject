@@ -5,6 +5,7 @@ import {
   type TaskNode
 } from "../model/index";
 import { parsePlanMarkdown, upgradeSchemaV1ToV2 } from "../parser";
+import { resolveStricterBooleanGate } from "../util";
 import { PlanRepository, findPlanUris, getGitUserName, getWorkspaceRootUri, hasOpenWorkspace, readTextFile, uriExists } from "../storage";
 import { AIService } from "../ai/AIService";
 import { TaskGenerator } from "../generation";
@@ -249,7 +250,7 @@ export class PlanController implements vscode.Disposable {
     const parsed = parsePlanMarkdown(before);
     const migration = upgradeSchemaV1ToV2(parsed.plan);
     await this.repository.savePlan(uri, migration.upgraded, {
-      researchGate: this.getConfiguration().get<boolean>("researchGate", true),
+      researchGate: resolveStricterBooleanGate(this.getConfiguration(), "researchGate", true),
       showRationaleInline: this.getConfiguration().get<boolean>("showRationaleInline", true)
     });
 
@@ -263,7 +264,7 @@ export class PlanController implements vscode.Disposable {
       return;
     }
 
-    const researchGate = this.getConfiguration().get<boolean>("researchGate", true);
+    const researchGate = resolveStricterBooleanGate(this.getConfiguration(), "researchGate", true);
     this.treeProvider.setPlan(this.plan, this.planUri, researchGate);
     this.treeProvider.setWorkspaceScan(this.scanService.getScan());
     this.statusBar.setMissingGoal(this.plan.goals.length === 0);
@@ -504,7 +505,7 @@ export class PlanController implements vscode.Disposable {
     let serialized: string;
     try {
       serialized = await this.repository.savePlan(this.planUri, this.plan, {
-        researchGate: config.get<boolean>("researchGate", true),
+        researchGate: resolveStricterBooleanGate(config, "researchGate", true),
         showRationaleInline: config.get<boolean>("showRationaleInline", true)
       });
     } finally {
