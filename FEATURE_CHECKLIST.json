@@ -100,5 +100,23 @@
     "feature": "Debate accept action persists through plan serialization round-trip",
     "testFile": "test/integration/integration.test.ts",
     "testName": "debate accept action persists through plan serialization round-trip"
+  },
+  {
+    "section": "2. Parser, Schema, Migration",
+    "feature": "Task metadata round-trips every field individually (P0-A1)",
+    "testFile": "test/parser-fidelity.test.ts",
+    "testName": "task metadata round-trips every field individually through serialize/parse"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Queue build stays within budget at 2,000 tasks with edges intact (P0-A2)",
+    "testFile": "test/bench/queue.bench.ts",
+    "testName": "buildExecutionQueue completes within ${BUDGET_MS}ms at ${TASK_COUNT} tasks with edges intact (P0-A2)"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Unresolved dependency stays blocked across a serialize/parse round trip (P0-B2)",
+    "testFile": "test/queue.test.ts",
+    "testName": "an unresolved dependency stays blocked across a full serialize/parse round trip"
   }
 ]
