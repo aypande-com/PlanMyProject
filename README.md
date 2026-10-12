@@ -1,6 +1,6 @@
 # PlanMyProject
 
-Current release: `v2 rewrite (branch preview)`
+Current release: `v2.0.0`
 
 Planning real engineering work is usually fragmented across notes, tickets, and chat. Execution drifts, priorities blur, and tasks lose context.
 
@@ -17,12 +17,12 @@ If you want to go from idea -> plan -> code without leaving VS Code, this extens
 <!-- pmp:build-status:start -->
 ## Build Status
 
-![build](https://img.shields.io/badge/build-pass-brightgreen?style=flat-square) ![tests](https://img.shields.io/badge/tests-118%2F118%20(100.00%25)-brightgreen?style=flat-square) ![code coverage](https://img.shields.io/badge/code%20coverage-59.57%25-red?style=flat-square) ![feature coverage](https://img.shields.io/badge/feature%20coverage-95.83%25-brightgreen?style=flat-square)
+![build](https://img.shields.io/badge/build-pass-brightgreen?style=flat-square) ![tests](https://img.shields.io/badge/tests-148%2F148%20(100.00%25)-brightgreen?style=flat-square) ![code coverage](https://img.shields.io/badge/code%20coverage-61.82%25-orange?style=flat-square) ![feature coverage](https://img.shields.io/badge/feature%20coverage-95.83%25-brightgreen?style=flat-square)
 
-Last updated: 2026-09-27T12:25:00.342Z
+Last updated: 2026-10-12T08:57:00.391Z
 - Overall build status: PASS
-- Test coverage: 118/118 tests passing (100.00%), failed: 0
-- Code coverage (all files): lines 59.57% | branches 72.18% | functions 68.46%
+- Test coverage: 148/148 tests passing (100.00%), failed: 0
+- Code coverage (all files): lines 61.82% | branches 73.59% | functions 70.53%
 - Feature coverage: 11.5/12 requirements (95.83%)
 
 Update source: `npm run build` or `npm run verify`
@@ -233,18 +233,22 @@ Result: [T0003] and descendants removed, queue updated
 - `PlanMyProject: View Research Index`
 - `PlanMyProject: View Debate Archive`
 - `PlanMyProject: Export Plan Summary`
+- `PlanMyProject: Scan Task`
+- `PlanMyProject: Infer Tasks From Scan`
+- `PlanMyProject: Set API Key`
+- `PlanMyProject: Undo Last Change`
 
-## Privacy and Copilot Data Flow
+## Privacy and AI Data Flow
 
-Copilot requests only happen for Copilot-backed actions and only after consent.
+AI requests only happen for AI-backed actions and only after consent (`planmyproject.requireAiConsent`).
 
-- Per-request approval via `Send to Copilot`
-- Session approval via `Allow All`
-- Prompt masking redacts common token/secret patterns before send
-- Extra confirmation is required for sensitive file targets, including:
-  - `.env*`
-  - `.git/*`, `.github/*`, `.vscode/*`
-  - lockfiles and common config files (`tsconfig*`, ESLint, Prettier, etc.)
+- Per-request approval, or one approval per session
+- Prompt masking always redacts common secrets (cloud keys, GitHub/GitLab/Slack tokens, JWTs, database connection strings, quoted `password`/`secret`/`token`/`api_key` fields) before anything is sent
+- Optional masking of email addresses and IP addresses: `planmyproject.masking.maskEmails`, `planmyproject.masking.maskIpAddresses` (both off by default)
+- Linked files under `.env*`, `.git/`, `.vscode/`, `.github/` and `.devcontainer/` are **never** sent, and the warning names each refused file. Lockfiles and build configs (`tsconfig*`, ESLint, Prettier, etc.) can still be sent as context, and get an extra confirmation when written
+- Claude and OpenAI API keys live in VS Code secure storage, never in settings files. A key found in `settings.json` is moved there and removed
+- Safety settings cannot be weakened by a workspace: `aiProvider`, `sendFileContentsToAI`, `defaultTaskFileSendPolicy` and `requireAiConsent` ignore workspace values, and `researchGate` / `confidenceThreshold` accept a workspace value only if it is stricter than yours
+- After `Set Project Goal` or `Import Goal Statement`, a wording review sends the goal text to your AI provider (with the same consent and masking) to suggest spelling fixes. Declining it keeps your text unchanged
 
 ## Supported Workspace Edits
 

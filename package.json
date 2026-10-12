@@ -3,7 +3,7 @@
   "displayName": "Plan My Project",
   "description": "Research-first, goal-anchored AI planning and implementation for VS Code workspaces.",
   "icon": "media/marketplace-icon.png",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "publisher": "aypande",
   "license": "MIT",
   "repository": {
