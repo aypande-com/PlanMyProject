@@ -137,6 +137,50 @@ export function buildImplementationPrompt(input: ImplementPromptInput): string {
   ].join("\n");
 }
 
+export interface WordingReviewPromptInput {
+  statement: string;
+  successCriteria: string[];
+  constraints: string[];
+  outOfScope: string[];
+}
+
+export function buildWordingReviewPrompt(input: WordingReviewPromptInput): string {
+  const listBlock = (items: string[]) =>
+    items.length === 0 ? "(none)" : items.map((item, index) => `${index + 1}. ${item}`).join("\n");
+
+  return [
+    "[SYSTEM LAYER]",
+    "You are a careful technical editor reviewing a project goal before it is saved.",
+    "Respond in JSON only.",
+    "",
+    "[INPUT LAYER]",
+    `Statement: ${input.statement}`,
+    "Success Criteria:",
+    listBlock(input.successCriteria),
+    "Constraints:",
+    listBlock(input.constraints),
+    "Out of Scope:",
+    listBlock(input.outOfScope),
+    "",
+    "[INSTRUCTION LAYER]",
+    "For every line above:",
+    "1. Fix spelling and obvious typos only. Never change the meaning, add requirements, or rephrase for style.",
+    "2. Separately, flag any word or phrase that sounds like a requirement but is not objectively checkable",
+    "   (e.g. \"fast\", \"secure\", \"user-friendly\", \"robust\", \"simple\", \"intuitive\"). For each, give a short",
+    "   reason and, only if one is obvious from context, a concrete suggestion. Do not flag language that is",
+    "   already specific, and do not invent requirements the user did not state.",
+    "3. If a line needs neither, return it with \"corrected\" equal to the original text and an empty notes array.",
+    "",
+    "Return JSON only. successCriteria/constraints/outOfScope arrays must be the exact same length and order as the input lists:",
+    "{",
+    "  \"statement\": { \"corrected\": \"string\", \"notes\": [{ \"phrase\": \"string\", \"reason\": \"string\", \"suggestion\": \"string\" }] },",
+    "  \"successCriteria\": [ { \"corrected\": \"string\", \"notes\": [] } ],",
+    "  \"constraints\": [ { \"corrected\": \"string\", \"notes\": [] } ],",
+    "  \"outOfScope\": [ { \"corrected\": \"string\", \"notes\": [] } ]",
+    "}"
+  ].join("\n");
+}
+
 export function summarizeDraftTasks(drafts: GeneratedTaskDraft[]): string {
   return drafts
     .map((task) => `${TASK_TYPE_ICONS[task.type]} ${task.title} (${Math.round(task.confidence * 100)}%)`)

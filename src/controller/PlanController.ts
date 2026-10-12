@@ -76,6 +76,10 @@ export class PlanController implements vscode.Disposable {
         persistAndRefresh: () => this.persistAndRefresh(),
         getConfiguration: () => this.getConfiguration()
       },
+      {
+        aiService: this.aiService,
+        consentService: this.consentService
+      },
       new GoalSetupPanel()
     );
 
@@ -182,7 +186,14 @@ export class PlanController implements vscode.Disposable {
     // trigger a re-parse — it causes redundant I/O and interferes with streaming.
     this.context.subscriptions.push(
       watcher,
-      watcher.onDidCreate(async () => this.safeWatcherCallback("onDidCreate", () => this.refreshPlanState())),
+      watcher.onDidCreate(async () =>
+        this.safeWatcherCallback("onDidCreate", async () => {
+          if (this.isSelfWriting) {
+            return;
+          }
+          await this.refreshPlanState();
+        })
+      ),
       watcher.onDidChange(async () =>
         this.safeWatcherCallback("onDidChange", async () => {
           if (this.isSelfWriting) {
@@ -516,7 +527,17 @@ export class PlanController implements vscode.Disposable {
 
   private async ensureMutablePlan(commandName: string): Promise<void> {
     if (!this.plan) {
-      await this.refreshPlanState();
+      // loadPlan() may create planmyproject.md for the first time; without
+      // this guard, that write fires the now-isSelfWriting-aware onDidCreate
+      // watcher unguarded, scheduling a redundant refreshPlanState() that can
+      // land mid-command (e.g. while GoalSetupPanel's multi-step prompt is
+      // still open) and replace this.plan out from under it.
+      this.isSelfWriting = true;
+      try {
+        await this.refreshPlanState();
+      } finally {
+        this.isSelfWriting = false;
+      }
     }
 
     if (!this.plan) {

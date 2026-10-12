@@ -146,6 +146,116 @@ export function parseImplementationResponse(rawText: string): ImplementationResp
   };
 }
 
+// ---------------------------------------------------------------------------
+// Goal wording review (spelling fixes + vague-requirement flags)
+// ---------------------------------------------------------------------------
+
+export interface WordingNote {
+  phrase: string;
+  reason: string;
+  suggestion: string;
+}
+
+export interface WordingReviewItem {
+  corrected: string;
+  notes: WordingNote[];
+}
+
+export interface WordingReviewInput {
+  statement: string;
+  successCriteria: string[];
+  constraints: string[];
+  outOfScope: string[];
+}
+
+export interface WordingReviewResult {
+  statement: WordingReviewItem;
+  successCriteria: WordingReviewItem[];
+  constraints: WordingReviewItem[];
+  outOfScope: WordingReviewItem[];
+}
+
+// The AI's output here only ever drives an optional, user-approved edit (see
+// GoalCommandService.reviewGoalWording) - it never replaces the user's text
+// on its own. So on anything unparseable or shape-mismatched, this falls
+// back to the original wording verbatim rather than guessing: losing a
+// correction is harmless, silently losing or reordering the user's own
+// words is not.
+export function parseWordingReviewResponse(rawText: string, input: WordingReviewInput): WordingReviewResult {
+  const fallback: WordingReviewResult = {
+    statement: { corrected: input.statement, notes: [] },
+    successCriteria: input.successCriteria.map((text) => ({ corrected: text, notes: [] })),
+    constraints: input.constraints.map((text) => ({ corrected: text, notes: [] })),
+    outOfScope: input.outOfScope.map((text) => ({ corrected: text, notes: [] }))
+  };
+
+  const jsonText = extractJsonObject(rawText);
+  if (!jsonText) {
+    return fallback;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    return fallback;
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return fallback;
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  return {
+    statement: normalizeWordingItem(obj.statement, input.statement),
+    successCriteria: normalizeWordingItemArray(obj.successCriteria, input.successCriteria),
+    constraints: normalizeWordingItemArray(obj.constraints, input.constraints),
+    outOfScope: normalizeWordingItemArray(obj.outOfScope, input.outOfScope)
+  };
+}
+
+function normalizeWordingItem(value: unknown, original: string): WordingReviewItem {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { corrected: original, notes: [] };
+  }
+  const entry = value as Record<string, unknown>;
+  const corrected = typeof entry.corrected === "string" && entry.corrected.trim().length > 0
+    ? entry.corrected.trim()
+    : original;
+  return { corrected, notes: normalizeWordingNotes(entry.notes) };
+}
+
+function normalizeWordingItemArray(value: unknown, originals: string[]): WordingReviewItem[] {
+  // A length mismatch means the response can't be reliably paired line-by-
+  // line with the input - treat it as unusable rather than risk attaching a
+  // correction to the wrong criterion.
+  if (!Array.isArray(value) || value.length !== originals.length) {
+    return originals.map((text) => ({ corrected: text, notes: [] }));
+  }
+  return originals.map((original, index) => normalizeWordingItem(value[index], original));
+}
+
+function normalizeWordingNotes(value: unknown): WordingNote[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const notes: WordingNote[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+    const entry = item as Record<string, unknown>;
+    const phrase = typeof entry.phrase === "string" ? entry.phrase.trim() : "";
+    const reason = typeof entry.reason === "string" ? entry.reason.trim() : "";
+    if (!phrase || !reason) {
+      continue;
+    }
+    const suggestion = typeof entry.suggestion === "string" ? entry.suggestion.trim() : "";
+    notes.push({ phrase, reason, suggestion });
+  }
+  return notes;
+}
+
 function normalizeConfidence(value: unknown): number {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
@@ -164,7 +274,7 @@ function toStringArray(value: unknown): string[] {
     .filter((entry) => entry.length > 0);
 }
 
-function extractJsonObject(text: string): string | undefined {
+export function extractJsonObject(text: string): string | undefined {
   const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
   let match: RegExpExecArray | null = fenceRegex.exec(text);
   while (match) {
