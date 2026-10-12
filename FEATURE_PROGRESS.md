@@ -16,6 +16,57 @@
 
 ---
 
+## v3 Execution Log (from baseline `baebf65`)
+
+*Added 2026-10-12. Tracks `PlanMyProject_v3_Implementation_Plan.md` (§16). The test counts in the report below predate this work; current numbers are in this section.*
+
+### Phase P0 — Blocking defects (U0–U11): complete
+
+**What landed:** CI workflow with a recursive test glob (amendments A2, A3); field-level metadata round-trip fidelity tests; the parser colon-truncation fix and the queue super-linearity fix shipped together as one commit (`76f659f`); dependency and research-gate blocking verified across save/reload; `npm run bench` with a committed baseline and tolerance band; all settings explicitly scoped with a CI check (`check:settings-scope`); one-way migration of API keys out of settings into secret storage; sensitivity enforcement on egress (secret-bearing files refused and named); expanded prompt masking with `maskEmails`/`maskIpAddresses` wired to real settings; a security regression suite; esbuild bundling to a single `out/extension.js`.
+
+**What moved from the plan:**
+- U7's first fix was incomplete. Declaring `scope` alone did not help because `getApiKey` detected leftovers with `configuration.get()`, which VS Code scope-filters, so a key committed in a workspace `settings.json` was never seen. Detection now uses `inspect()`; U10 closed the loop.
+- `vscode:prepublish` never compiled anything (it only refreshed README badges). Now `compile && build`.
+- `scripts/update-readme-build-status.js` re-emitted the unbundled tree over the esbuild bundle (found by inspecting the packaged VSIX). Fixed with `--noEmit`.
+- U6 closed by measurement. The O(children) sibling scan in `getTaskBlockReason` remains at three call sites, but the worst case (2,000 tasks under one parent) serializes in about 15 ms, inside the 50 ms bar, and `serialize-2000-tasks` now gates it.
+
+**Measurements (this machine, best of N after warm-up):**
+
+| Operation | Baseline | Now |
+|---|---|---|
+| Queue build, 2,000 tasks | ~11,400 ms | ~8 ms |
+| Serialize, 1,000 tasks | 12,988 ms | ~12 ms |
+| Serialize, 2,000 tasks | n/a | ~15 ms |
+
+### Phase P4F — Finish v2 (U12–U15): complete; U16 (release 2.0.0) not started
+
+**What landed:** auto-complete prompt from scan deltas (P4-B1); `code-inferred` tasks from a scan via the new "Infer" CodeLens (P4-B2); `goalCriterionIndex` bounds check that downgrades confidence by 0.2 (P4-D1), plus tests for the three response-schema guards that already existed untested (P4-D2); watcher callbacks that log and warn once per session instead of swallowing failures (P4-H3); dependency cycles surfaced via `detectedCycles` instead of silently absorbed (P4-H4).
+
+**Findings outside the plan:**
+- **Goal lost on first run (found by a user, fixed in `7719270`).** The plan-file watcher's `onDidCreate` lacked the `isSelfWriting` guard its siblings have, so creating `planmyproject.md` for the first time could reload the plan while the goal form was open and orphan the goal. Tasks still carried `goalRef`, so the file showed tasks referencing a goal with an empty Goals section. `GoalCommandService` now re-fetches the live plan before each mutation. When U39 replaces `isSelfWriting` with write-origin tokens, the `onDidCreate` guard must be carried over.
+- **Parse time was quadratic in sibling/root count.** Profiling showed `addTask`'s `children.includes()` duplicate guard at 66% of parse time (4,000 tasks: 595 ms, ×8.6 for 4× the tasks). The scan now runs only for ids already registered. After the fix: ×4.3, flat profile. Gated by `parser.bench.ts`. Parse of 1,000 siblings with a dependency chain went from ~70 ms to ~38 ms; the old 23.5 ms baseline predates the metadata fix and is not comparable.
+- **Wording review (unplanned, `7719270`).** After Set Project Goal or Import Goal Statement, one consent-gated AI pass proposes spelling fixes (pre-checked) and flags vague requirement language ("fast", "secure") for the user to rewrite. It fails open to the user's original text.
+
+**Test delta:** 72 → 148 passing, plus 7 benchmark tests under `npm run bench`. Checklist: 17 → 71 entries, all green. Settings scoped: 0/17 → 19/19.
+
+**Known gaps:**
+- `PlanController` has no tests; the goal race was found by a user, not a test.
+- The AI-calling and QuickPick part of `reviewGoalWording` is untested because the vscode shim has no `showQuickPick` or `showInputBox`. Only its pure helpers are covered.
+- The README still lacks the user-visible 2.0.0 changes (API key migration, workspace settings that can no longer weaken controls, egress refusals); these belong in the U16 CHANGELOG.
+
+### Decisions and amendments
+
+| Item | Status |
+|---|---|
+| D-13 settings scoping | **Locked and implemented.** `aiProvider`, `sendFileContentsToAI`, `defaultTaskFileSendPolicy`, `requireAiConsent`: machine. API keys: application. The rest: window, with a stricter-of-all-scopes resolver for `researchGate` and `confidenceThreshold` |
+| Amendment A1 (LSP is a measured gate) | Recorded. Not yet exercised (P6) |
+| Amendment A2 (CI first) | Done in U0 |
+| Amendment A3 (recursive test glob) | Done in U0, then reverted in `7b66127`: the CI Node version cannot expand globs for `node --test`. `npm test` and `npm run bench` use explicit directory globs again, so **a new test directory needs a script change** |
+| D-12 (derived queue) | Deferred to P10 as planned |
+| D-1 (trace field layout), D-4 (requirement ID scope) | **Open. Must be locked before U18/U22.** |
+
+---
+
 ## Implemented Since Last Report (March 19 → April 5, 2026)
 
 ### P3 Architecture Refactor
