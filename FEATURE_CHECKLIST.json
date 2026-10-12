@@ -352,5 +352,77 @@
     "feature": "Queue builder does not false-positive detectedCycles on an acyclic plan (P4-H4)",
     "testFile": "test/queue.test.ts",
     "testName": "buildExecutionQueue has no detectedCycles field for an acyclic plan"
+  },
+  {
+    "section": "2. Parser, Schema, Migration",
+    "feature": "addTask keeps its duplicate guard for an already-registered child id",
+    "testFile": "test/parser.test.ts",
+    "testName": "addTask does not duplicate a child id when the same task is added twice"
+  },
+  {
+    "section": "2. Parser, Schema, Migration",
+    "feature": "addTask keeps its duplicate guard for an already-registered root id",
+    "testFile": "test/parser.test.ts",
+    "testName": "addTask does not duplicate a root id when the same root task is added twice"
+  },
+  {
+    "section": "2. Parser, Schema, Migration",
+    "feature": "addTask preserves sibling insertion order",
+    "testFile": "test/parser.test.ts",
+    "testName": "addTask keeps sibling order for distinct new ids"
+  },
+  {
+    "section": "2. Parser, Schema, Migration",
+    "feature": "Parse time scales near-linearly with sibling count (1,000 to 4,000 tasks)",
+    "testFile": "test/bench/parser.bench.ts",
+    "testName": "parse time scales close to linearly from 1,000 to 4,000 tasks"
+  },
+  {
+    "section": "2. Parser, Schema, Migration",
+    "feature": "Parse time scales near-linearly with root-task count",
+    "testFile": "test/bench/parser.bench.ts",
+    "testName": "parse time scales close to linearly with many root tasks"
+  },
+  {
+    "section": "2. Parser, Schema, Migration",
+    "feature": "Parser benchmark fixture keeps its dependency edges across a round trip",
+    "testFile": "test/bench/parser.bench.ts",
+    "testName": "parser benchmark fixture round-trips with its dependency edges intact"
+  },
+  {
+    "section": "1. Core Architecture",
+    "feature": "Set Project Goal keeps the goal attached when the live plan is replaced mid-form",
+    "testFile": "test/goal-command.test.ts",
+    "testName": "setProjectGoal keeps the goal attached even if the live plan object is replaced while the form is open"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Wording review: spelling fix and vague-wording note parsed from AI response",
+    "testFile": "test/wording-review.test.ts",
+    "testName": "parseWordingReviewResponse applies a spelling fix and carries an ambiguity note through"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Wording review: unparseable AI response falls back to the original text",
+    "testFile": "test/wording-review.test.ts",
+    "testName": "parseWordingReviewResponse falls back to the original text when the AI response is unparseable"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Wording review: array length mismatch falls back instead of mis-pairing lines",
+    "testFile": "test/wording-review.test.ts",
+    "testName": "parseWordingReviewResponse falls back for a field whose array length doesn't match the input"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Wording review: only changed or flagged lines are surfaced to the user",
+    "testFile": "test/wording-review.test.ts",
+    "testName": "collectWordingReviewItems only surfaces lines with an actual spelling fix or a note"
+  },
+  {
+    "section": "4. AI Platform / Generation",
+    "feature": "Wording review: applying one item leaves the rest of the draft untouched",
+    "testFile": "test/wording-review.test.ts",
+    "testName": "applyWordingReviewItem rewrites only the targeted field/index, leaving the rest of the draft untouched"
   }
 ]

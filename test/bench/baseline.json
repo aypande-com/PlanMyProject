@@ -3,5 +3,15 @@
     "baselineMs": 25,
     "tolerance": 2,
     "note": "Post-U3 (rank-map + binary heap). Pre-U3 this took ~11,400ms on the same fixture. Re-measure and update this file if a change intentionally alters queue-build performance; do not raise the tolerance to make a regression pass."
+  },
+  "parse-2000-tasks": {
+    "baselineMs": 80,
+    "tolerance": 2,
+    "note": "2000 sibling tasks with a dependency chain, after the addTask fix (children.includes was O(siblings) per add; before it this fixture took ~196ms and grew x8.6 for 4x the tasks). The curve-shape test in parser.bench.ts is the primary guard; this absolute budget is a coarse backstop."
+  },
+  "serialize-2000-tasks": {
+    "baselineMs": 20,
+    "tolerance": 2,
+    "note": "Measured ~15ms on the same fixture. Pre-U3 serialize took ~12,988ms at 1,000 tasks."
   }
 }

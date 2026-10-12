@@ -219,3 +219,37 @@ test("debate entries with multiline content (lists) survive serialize/parse roun
   assert.ok(parsedTask.debateLog[0].content.includes("- Concurrency model: OT vs CRDT"));
   assert.ok(parsedTask.debateLog[0].content.includes("- Networking: WebSocket vs WebRTC"));
 });
+
+// addTask skips its O(siblings) duplicate scan for ids it has never seen (a
+// parse-time performance fix). These pin down that the guard still works for
+// the case it exists for: re-adding an id that is already registered.
+test("addTask does not duplicate a child id when the same task is added twice", () => {
+  const plan = createEmptyPlanDocument();
+  addTask(plan, createTaskNode({ id: "T0001", title: "Parent", type: "milestone" }));
+  const child = createTaskNode({ id: "T0002", title: "Child", type: "implementation", parentId: "T0001" });
+
+  addTask(plan, child);
+  addTask(plan, child);
+
+  assert.deepEqual(plan.tasks["T0001"].children, ["T0002"]);
+});
+
+test("addTask does not duplicate a root id when the same root task is added twice", () => {
+  const plan = createEmptyPlanDocument();
+  const root = createTaskNode({ id: "T0001", title: "Root", type: "milestone" });
+
+  addTask(plan, root);
+  addTask(plan, root);
+
+  assert.deepEqual(plan.rootTaskIds, ["T0001"]);
+});
+
+test("addTask keeps sibling order for distinct new ids", () => {
+  const plan = createEmptyPlanDocument();
+  addTask(plan, createTaskNode({ id: "T0001", title: "Parent", type: "milestone" }));
+  for (const id of ["T0003", "T0002", "T0004"]) {
+    addTask(plan, createTaskNode({ id, title: id, type: "implementation", parentId: "T0001" }));
+  }
+
+  assert.deepEqual(plan.tasks["T0001"].children, ["T0003", "T0002", "T0004"]);
+});

@@ -87,15 +87,20 @@ export function listLeafTasks(plan: PlanDocument): TaskNode[] {
 }
 
 export function addTask(plan: PlanDocument, task: TaskNode): void {
+  // The duplicate guard below is an O(siblings) scan. It only matters when
+  // this id was already registered (re-adding or replacing a task), so a
+  // brand-new id skips it - otherwise adding N siblings or N roots is O(N^2),
+  // which is what made parsing a large plan grow ~8x for 4x the tasks.
+  const alreadyKnown = plan.tasks[task.id] !== undefined;
   plan.tasks[task.id] = task;
   if (task.parentId) {
     const parent = plan.tasks[task.parentId];
-    if (parent && !parent.children.includes(task.id)) {
+    if (parent && (!alreadyKnown || !parent.children.includes(task.id))) {
       parent.children.push(task.id);
     }
     return;
   }
-  if (!plan.rootTaskIds.includes(task.id)) {
+  if (!alreadyKnown || !plan.rootTaskIds.includes(task.id)) {
     plan.rootTaskIds.push(task.id);
   }
 }
